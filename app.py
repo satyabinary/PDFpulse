@@ -1,148 +1,127 @@
+"""
+Multi-PDF RAG — Web UI (Streamlit)
+------------------------------------
+A colorful, browser-based front end for rag_system.py. Reuses all the core
+logic (PDF processing, chunking, ChromaDB, Ollama) from rag_system.py —
+this file is purely the UI layer.
+
+Setup (one time):
+    pip install streamlit chromadb sentence-transformers pypdf ollama --break-system-packages
+    ollama pull llama3
+
+Run:
+    streamlit run app.py
+"""
+
+import contextlib
+import io
+import json
 import os
 import tempfile
-import json
+
 import streamlit as st
 
-# Import core RAG functions
 from rag_system import (
     add_pdfs,
     answer_question,
     get_collection,
+    get_unique_sources,
     HISTORY_FILE,
 )
 
-# ---------------------------------------------------------------------------
-# PAGE CONFIGURATION (PREMIUM LOOK)
-# ---------------------------------------------------------------------------
-st.set_page_config(
-    page_title="PDFpulse — Advanced Multi-PDF RAG",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="PDFpulse", page_icon="🩵", layout="wide")
 
 # ---------------------------------------------------------------------------
-# CUSTOM CSS FOR ULTRA-MODERN GLOW & CLASSY THEME
+# Custom CSS — colorful / playful theme
 # ---------------------------------------------------------------------------
 st.markdown("""
-    <style>
-    /* Google Fonts Import */
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-    
-    /* Global Typography Reset */
-    html, body, [data-testid="stAppViewContainer"], .main {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-    }
-    
-    /* Custom Theme Gradient Background */
-    [data-testid="stAppViewContainer"] {
-        background: radial-gradient(circle at 10% 20%, rgba(18, 16, 32, 1) 0%, rgba(10, 10, 15, 1) 100%);
-    }
-    
-    /* Glassmorphic Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: rgba(18, 18, 30, 0.95) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
-    /* Neon Glow & Pulse animations */
-    @keyframes pulse {
-        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4); }
-        70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(124, 58, 237, 0); }
-        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
-    }
-    
-    .pulse-glow {
-        animation: pulse 2s infinite;
-        border: 2px solid #7c3aed !important;
+<style>
+    .stApp {
+        background: linear-gradient(160deg, #fdf2ff 0%, #f0f7ff 50%, #fff9f0 100%);
     }
 
-    /* Gradient Text & Titles */
-    .hero-title {
-        background: linear-gradient(135deg, #a78bfa 0%, #3b82f6 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800;
-        font-size: 2.8rem;
-        margin-bottom: 5px;
+    /* Header banner */
+    .pdfpulse-header {
+        background: linear-gradient(120deg, #7c3aed, #ec4899, #f59e0b);
+        padding: 28px 32px;
+        border-radius: 20px;
+        margin-bottom: 24px;
+        box-shadow: 0 8px 24px rgba(124, 58, 237, 0.25);
+    }
+    .pdfpulse-header h1 {
+        color: white;
+        margin: 0;
+        font-size: 2.1rem;
+    }
+    .pdfpulse-header p {
+        color: rgba(255,255,255,0.9);
+        margin: 4px 0 0 0;
+        font-size: 1rem;
     }
 
-    /* Custom Cards */
-    .dashboard-card {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+    /* Stat cards */
+    .stat-card {
         border-radius: 16px;
-        padding: 20px;
-        transition: all 0.3s ease;
-        margin-bottom: 15px;
+        padding: 18px 20px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.12);
     }
-    .dashboard-card:hover {
-        border-color: rgba(124, 58, 237, 0.5);
-        transform: translateY(-2px);
+    .stat-card .num { font-size: 2rem; font-weight: 800; line-height: 1.1; }
+    .stat-card .label { font-size: 0.85rem; opacity: 0.9; margin-top: 4px; }
+    .stat-1 { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+    .stat-2 { background: linear-gradient(135deg, #ec4899, #f472b6); }
+    .stat-3 { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #ede9fe, #fce7f3);
     }
 
-    /* Live Badge Indicator */
-    .badge-ready {
-        background: rgba(16, 185, 129, 0.15);
-        color: #10b981;
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        padding: 4px 10px;
-        border-radius: 50px;
-        font-size: 0.75rem;
+    /* Doc pill */
+    .doc-pill {
+        display: inline-block;
+        background: white;
+        border: 1.5px solid #d8b4fe;
+        color: #6d28d9;
+        padding: 4px 12px;
+        border-radius: 999px;
+        margin: 3px 4px 3px 0;
+        font-size: 0.82rem;
         font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-    }
-    
-    .badge-empty {
-        background: rgba(245, 158, 11, 0.15);
-        color: #f59e0b;
-        border: 1px solid rgba(245, 158, 11, 0.3);
-        padding: 4px 10px;
-        border-radius: 50px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
     }
 
-    /* Beautiful Chat Avatars & Containers */
-    .stChatMessage {
-        border-radius: 16px !important;
-        margin-bottom: 15px !important;
-        padding: 15px !important;
+    /* Source chunk card */
+    .source-chunk {
+        background: #faf5ff;
+        border-left: 4px solid #a855f7;
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        font-size: 0.88rem;
     }
-    .stChatMessage[data-testid="stChatMessageUser"] {
-        background-color: rgba(124, 58, 237, 0.08) !important;
-        border: 1px solid rgba(124, 58, 237, 0.15) !important;
+    .source-chunk .meta {
+        color: #a855f7;
+        font-weight: 700;
+        font-size: 0.78rem;
+        margin-bottom: 4px;
     }
-    
-    /* Interactive Quick Start Cards */
-    .quick-card {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        padding: 15px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-align: left;
+
+    /* Example question chips */
+    .stButton button {
+        border-radius: 999px !important;
     }
-    .quick-card:hover {
-        background: rgba(124, 58, 237, 0.08);
-        border-color: rgba(124, 58, 237, 0.4);
-    }
-    </style>
+</style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Session state initialization
+# Session state init
 # ---------------------------------------------------------------------------
 if "chat" not in st.session_state:
-    st.session_state.chat = []
-if "clicked_prompt" not in st.session_state:
-    st.session_state.clicked_prompt = None
+    st.session_state.chat = []  # list of {"role", "content", "chunks"(optional)}
+if "pending_question" not in st.session_state:
+    st.session_state.pending_question = None
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -153,178 +132,160 @@ def get_doc_count() -> int:
     except Exception:
         return 0
 
+
 def load_history_records():
     if not os.path.exists(HISTORY_FILE):
         return []
     with open(HISTORY_FILE, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
-# ---------------------------------------------------------------------------
-# Sidebar — Redesigned with Glassmorphism & Status indicators
-# ---------------------------------------------------------------------------
-with st.sidebar:
-    # Logo with custom glow
-    st.markdown("""
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding-top:10px;">
-            <div style="background: linear-gradient(135deg, #7c3aed, #3b82f6); width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);">
-                <span style="font-size: 20px; color: white;">⚡</span>
-            </div>
-            <div>
-                <h2 style="margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">PDF<span style="color: #a78bfa;">pulse</span></h2>
-                <span style="font-size: 0.75rem; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase;">Next-Gen RAG System</span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
 
-    # Dynamic status pill
-    doc_count = get_doc_count()
-    if doc_count > 0:
-        st.markdown('<div class="badge-ready"><span style="color: #10b981;">●</span> Engine Online — Ready</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="badge-empty"><span style="color: #f59e0b;">●</span> Waiting for Uploads</div>', unsafe_allow_html=True)
-
-    st.write("") # Spacer
-
-    # Drop zone section
-    st.markdown("<h4 style='margin-bottom:0px; font-weight: 600;'>📁 Upload Documents</h4>", unsafe_allow_html=True)
-    uploaded_files = st.file_uploader(
-        "Upload PDF files to start context indexing", 
-        type=["pdf"], 
-        accept_multiple_files=True,
-        label_visibility="collapsed"
+def render_source_chunk(c):
+    text = c["text"][:400] + ("..." if len(c["text"]) > 400 else "")
+    st.markdown(
+        f'<div class="source-chunk">'
+        f'<div class="meta">📄 {c["source"]} · page {c["page"]}</div>'
+        f'{text}'
+        f'</div>',
+        unsafe_allow_html=True,
     )
 
-    if uploaded_files:
-        st.markdown(f"<p style='font-size:0.85rem; color:#a78bfa;'>📎 Loaded {len(uploaded_files)} PDF(s)</p>", unsafe_allow_html=True)
-        if st.button("🚀 Index Documents", use_container_width=True, type="primary"):
-            tmp_dir = tempfile.mkdtemp()
-            saved_paths = []
-            for uf in uploaded_files:
-                path = os.path.join(tmp_dir, uf.name)
-                with open(path, "wb") as f:
-                    f.write(uf.getbuffer())
-                saved_paths.append(path)
 
-            with st.spinner("⚡ Parsing & Indexing into ChromaDB... Please wait."):
-                import io
-                import contextlib
-                buf = io.StringIO()
-                with contextlib.redirect_stdout(buf):
-                    add_pdfs(saved_paths)
+EXAMPLE_QUESTIONS = [
+    "📝 Summarize this document",
+    "🔑 What are the key points?",
+    "❓ What questions does this answer?",
+]
 
-            st.balloons()
-            st.success("Successfully vectorized database!")
-            st.rerun()
 
-    st.markdown("---")
-    
-    # System Metrics Display Card
-    st.markdown("""
-        <div class="dashboard-card">
-            <span style="color: #9ca3af; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">Vector Engine Data</span>
-            <h3 style="margin: 5px 0; font-size: 2rem; font-weight: 700; color: #f3f4f6;">{}</h3>
-            <span style="color: #a78bfa; font-size: 0.8rem;">Chunks available in KB</span>
-        </div>
-    """.format(doc_count), unsafe_allow_html=True)
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+st.markdown("""
+<div class="pdfpulse-header">
+    <h1>🩵 PDFpulse</h1>
+    <p>Upload PDFs, ask anything, get grounded answers with citations — powered by your own local AI.</p>
+</div>
+""", unsafe_allow_html=True)
 
-    # Clear Chat with warning styling
-    if st.button("🗑️ Clear Active Sessions", use_container_width=True):
-        st.session_state.chat = []
-        st.session_state.clicked_prompt = None
+# ---------------------------------------------------------------------------
+# Sidebar — PDF upload + knowledge base status
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown("### 📤 Add documents")
+    uploaded_files = st.file_uploader(
+        "Upload PDF(s)", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed"
+    )
+
+    if uploaded_files and st.button("✨ Process PDFs", use_container_width=True, type="primary"):
+        tmp_dir = tempfile.mkdtemp()
+        saved_paths = []
+        for uf in uploaded_files:
+            path = os.path.join(tmp_dir, uf.name)
+            with open(path, "wb") as f:
+                f.write(uf.getbuffer())
+            saved_paths.append(path)
+
+        with st.spinner(f"🔮 Reading {len(saved_paths)} file(s)... (first run also downloads the embedding model)"):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                add_pdfs(saved_paths)
+
+        st.success("Done! Your documents are ready to chat with. 🎉")
         st.rerun()
 
-# ---------------------------------------------------------------------------
-# Main workspace layout (Cleaned and Modernized)
-# ---------------------------------------------------------------------------
-st.markdown("<p style='margin-bottom:0.2rem; color: #a78bfa; font-weight: 600; text-transform: uppercase; font-size:0.8rem; letter-spacing: 1.5px;'>AI CO-PILOT ASSISTANT</p>", unsafe_allow_html=True)
-st.markdown("<h1 class='hero-title'>Empower Your Documents</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #9ca3af; font-size: 1.1rem; margin-top: -10px;'>Chat inside a localized context space powered by Llama-3 & Embeddings.</p>", unsafe_allow_html=True)
+    st.divider()
 
-# Main tabs switcher
-tab_chat, tab_history = st.tabs(["💬 Dynamic Chat", "🕒 History Log"])
+    st.markdown("### 📚 Your library")
+    sources = get_unique_sources()
+    if sources:
+        pills = "".join(f'<span class="doc-pill">📄 {s}</span>' for s in sources)
+        st.markdown(pills, unsafe_allow_html=True)
+    else:
+        st.info("No PDFs yet — upload one above to get started.")
+
+    st.divider()
+    if st.button("🗑️ Clear chat", use_container_width=True):
+        st.session_state.chat = []
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Stats dashboard
+# ---------------------------------------------------------------------------
+chunk_count = get_doc_count()
+pdf_count = len(get_unique_sources())
+question_count = len(load_history_records())
+
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.markdown(f'<div class="stat-card stat-1"><div class="num">{pdf_count}</div><div class="label">📄 PDFs loaded</div></div>', unsafe_allow_html=True)
+with c2:
+    st.markdown(f'<div class="stat-card stat-2"><div class="num">{chunk_count}</div><div class="label">🧩 Chunks indexed</div></div>', unsafe_allow_html=True)
+with c3:
+    st.markdown(f'<div class="stat-card stat-3"><div class="num">{question_count}</div><div class="label">💬 Questions asked</div></div>', unsafe_allow_html=True)
+
+st.write("")
+
+# ---------------------------------------------------------------------------
+# Main area — tabs for Chat and History
+# ---------------------------------------------------------------------------
+tab_chat, tab_history = st.tabs(["💬  Chat", "🕒  History"])
 
 with tab_chat:
-    # Onboarding State (If chat is empty)
     if not st.session_state.chat:
-        st.markdown("""
-            <div style="background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%); border: 1px solid rgba(124, 58, 237, 0.15); border-radius: 20px; padding: 40px; text-align: center; margin: 30px 0;">
-                <span style="font-size: 3.5rem;">🧠</span>
-                <h3 style="margin-top: 15px; font-weight: 700; font-size:1.6rem;">No conversations active</h3>
-                <p style="color: #9ca3af; max-width: 500px; margin: 0 auto 20px auto;">Upload documents to build your private local knowledge base. Once done, ask anything inside the prompt container below!</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("##### 💡 Try asking:")
+        cols = st.columns(len(EXAMPLE_QUESTIONS))
+        for col, ex in zip(cols, EXAMPLE_QUESTIONS):
+            with col:
+                if st.button(ex, use_container_width=True):
+                    st.session_state.pending_question = ex.split(" ", 1)[1]
 
-        # Suggested/Quick Start Questions
-        if doc_count > 0:
-            st.markdown("##### ⚡ Quick Start Prompts")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("📋 Summarize key findings from documents.", use_container_width=True):
-                    st.session_state.clicked_prompt = "Summarize the key findings and highlights from the uploaded documents."
-            with col2:
-                if st.button("🛡️ What are the potential risks identified?", use_container_width=True):
-                    st.session_state.clicked_prompt = "Explain any risks, warnings or concerns mentioned in the source texts."
-            with col3:
-                if st.button("📊 List action items and methodology.", use_container_width=True):
-                    st.session_state.clicked_prompt = "Extract and list the bulleted actionable points or methodologies mentioned."
-
-    # Render Active Chats
     for msg in st.session_state.chat:
-        with st.chat_message(msg["role"]):
+        avatar = "🙋" if msg["role"] == "user" else "🩵"
+        with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
+            if msg.get("chunks"):
+                with st.expander(f"📎 View {len(msg['chunks'])} source(s) used"):
+                    for c in msg["chunks"]:
+                        render_source_chunk(c)
 
-    # Handle clickable quick start buttons
-    if st.session_state.clicked_prompt:
-        question = st.session_state.clicked_prompt
-        st.session_state.clicked_prompt = None # Reset
-    else:
-        question = st.chat_input("Ask a question about your uploaded PDFs...")
+    typed_question = st.chat_input("Ask a question about your PDFs...")
+    question = st.session_state.pending_question or typed_question
+    st.session_state.pending_question = None
 
-    # Execute RAG query logic
     if question:
-        # Append User Msg
         st.session_state.chat.append({"role": "user", "content": question})
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar="🙋"):
             st.markdown(question)
 
-        # Append Assistant response
-        with st.chat_message("assistant"):
-            if doc_count == 0:
-                answer = "Error: System context is empty! Please drop one or more PDF files on the sidebar drag-and-drop zone first."
-                st.error(answer)
+        with st.chat_message("assistant", avatar="🩵"):
+            if get_doc_count() == 0:
+                answer = "No documents in the knowledge base yet — upload a PDF from the sidebar first. 📤"
+                chunks = []
+                st.warning(answer)
             else:
-                with st.status("🧠 Analyzing system context & generating answer...", expanded=False) as status:
-                    st.write("Searching database vectors...")
-                    # Simulating step response for smoother UX
-                    answer = answer_question(question)
-                    status.update(label="Complete analysis verified!", state="complete", expanded=False)
-                
-                # Render beautifully formatted Markdown
+                with st.spinner("🧠 Thinking..."):
+                    answer, chunks = answer_question(question, return_chunks=True)
                 st.markdown(answer)
+                if chunks:
+                    with st.expander(f"📎 View {len(chunks)} source(s) used"):
+                        for c in chunks:
+                            render_source_chunk(c)
 
-        st.session_state.chat.append({"role": "assistant", "content": answer})
-        st.rerun()
+        st.session_state.chat.append({"role": "assistant", "content": answer, "chunks": chunks})
 
-# ---------------------------------------------------------------------------
-# History tab — Premium Timelines Card look
-# ---------------------------------------------------------------------------
 with tab_history:
-    st.markdown("<h3 style='font-weight: 700; margin-bottom: 10px;'>📊 Past Activity Logs</h3>", unsafe_allow_html=True)
+    st.markdown("##### 🕒 Everything you've asked so far")
     records = load_history_records()
 
     if not records:
-        st.info("No past logs recorded on disk. Ask your first query to log conversations dynamically.")
+        st.info("No history yet — ask a question in the Chat tab first.")
     else:
-        for idx, rec in enumerate(reversed(records)):
-            with st.container():
-                st.markdown(f"""
-                    <div style="background: rgba(255,255,255,0.02); border-left: 3px solid #7c3aed; padding: 15px; margin-bottom:15px; border-radius: 0 12px 12px 0;">
-                        <span style="font-size:0.75rem; color:#9ca3af;">⏱️ Logs at: {rec['timestamp']}</span>
-                        <h4 style="margin: 5px 0 10px 0; font-weight: 600;">Q: {rec['question']}</h4>
-                        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; font-size: 0.92rem; color: #d1d5db; line-height: 1.6;">
-                            <strong>A:</strong> {rec['answer']}
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
+        for rec in reversed(records):
+            with st.expander(f"🗨️ {rec['question']}  ·  {rec['timestamp']}"):
+                st.markdown(f"**Q:** {rec['question']}")
+                st.markdown(f"**A:** {rec['answer']}")
                 if rec.get("sources"):
-                    st.markdown(f"<p style='font-size: 0.8rem; margin-top:-10px; padding-left:15px; color:#a78bfa;'>🎯 Source files: <code>{', '.join(rec['sources'])}</code></p>", unsafe_allow_html=True)
+                    pills = "".join(f'<span class="doc-pill">📄 {s}</span>' for s in rec["sources"])
+                    st.markdown(pills, unsafe_allow_html=True)
