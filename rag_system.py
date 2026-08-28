@@ -160,6 +160,16 @@ def get_collection():
     return collection
 
 
+def get_unique_sources() -> list[str]:
+    """Returns sorted list of distinct PDF filenames currently in the DB."""
+    collection = get_collection()
+    if collection.count() == 0:
+        return []
+    data = collection.get(include=["metadatas"])
+    sources = {m["source"] for m in data["metadatas"]}
+    return sorted(sources)
+
+
 def add_pdfs(pdf_paths: list[str]):
     collection = get_collection()
 
@@ -285,12 +295,15 @@ def show_history(last_n: int | None = None):
     print(f"\n({len(lines)} record(s) shown)")
 
 
-def answer_question(question: str, top_k: int = TOP_K) -> str:
+def answer_question(question: str, top_k: int = TOP_K, return_chunks: bool = False):
+    """Returns the answer string. If return_chunks=True, returns a tuple
+    (answer_with_footer, chunks) where chunks is the list of retrieved
+    context dicts — handy for showing "sources used" in a UI."""
     chunks = retrieve(question, top_k)
     if not chunks:
         answer = "No documents in the database yet. Add PDFs first with --add."
         log_history(question, answer, [])
-        return answer
+        return (answer, []) if return_chunks else answer
 
     prompt = build_prompt(question, chunks)
     answer = ask_ollama(prompt)
@@ -299,7 +312,8 @@ def answer_question(question: str, top_k: int = TOP_K) -> str:
     log_history(question, answer, sources_used)
 
     footer = "\n\nRetrieved from: " + ", ".join(sources_used)
-    return answer + footer
+    full_answer = answer + footer
+    return (full_answer, chunks) if return_chunks else full_answer
 
 
 # ---------------------------------------------------------------------------
