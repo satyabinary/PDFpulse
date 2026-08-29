@@ -31,7 +31,47 @@ This extracts text page-by-page, splits into ~800-char overlapping chunks,
 embeds them with `all-MiniLM-L6-v2`, and stores them in a local ChromaDB
 folder (`./chroma_db`) — persists across runs.
 
-## 4. Ask questions
+## Web UI (recommended — full custom HTML/CSS/JS, no framework restrictions)
+
+A proper browser-based UI is included: a Flask backend (`server.py`) that
+reuses all the logic from `rag_system.py`, plus a hand-built frontend
+(`templates/index.html`, `static/style.css`, `static/app.js`) — a real
+webpage with drag-and-drop upload, a chat interface, source-chunk previews,
+and a history tab.
+
+Install (one extra package):
+```bash
+pip install flask --break-system-packages
+```
+
+Run:
+```bash
+python server.py
+```
+
+Then open **http://localhost:5000** in your browser.
+
+Folder structure needed (already set up if you keep all the provided files together):
+```
+PDFpulse/
+├── rag_system.py
+├── server.py
+├── templates/
+│   └── index.html
+└── static/
+    ├── style.css
+    └── app.js
+```
+
+What you get:
+- **Sidebar** — drag-and-drop PDF upload, live stats (PDFs / chunks / questions), your document library as pills
+- **Chat tab** — real chat bubbles with avatars, example question chips, expandable "sources used" under each answer
+- **History tab** — click any past question to expand its full answer + sources
+
+The CLI (`rag_system.py`) still works exactly as before if you prefer the terminal.
+
+## CLI usage (terminal)
+
 
 Interactive mode:
 ```bash
@@ -52,6 +92,19 @@ Each answer cites which PDF + page number the info came from.
 3. **Embed + Store** — `sentence-transformers` embeds chunks, ChromaDB stores them persistently with metadata (source file, page number).
 4. **Retrieve** — on a question, top-5 most similar chunks are pulled via vector similarity.
 5. **Answer** — chunks + question are sent to a local LLM (Ollama) which answers using only that context, with citations.
+
+## History
+
+Every question + answer gets logged to `./history.jsonl` (one JSON record
+per line, with timestamp + sources used).
+
+View it:
+```bash
+python rag_system.py --history        # all history
+python rag_system.py --history 5      # last 5 entries only
+```
+
+Or inside `--ask` mode, just type `history` at the prompt.
 
 ## Customize
 
