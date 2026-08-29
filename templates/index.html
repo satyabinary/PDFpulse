@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFpulse — Multi-PDF RAG</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="bg-blob blob-1"></div>
+<div class="bg-blob blob-2"></div>
+<div class="bg-blob blob-3"></div>
+
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">🩵</div>
+      <div>
+        <h1>PDFpulse</h1>
+        <p>Local multi-PDF RAG</p>
+      </div>
+    </div>
+
+    <section class="panel">
+      <h2>📤 Add documents</h2>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".pdf" multiple hidden>
+        <div class="dropzone-icon">📄</div>
+        <div class="dropzone-text">Drop PDFs here or <span>browse</span></div>
+      </label>
+      <ul id="fileList" class="file-list"></ul>
+      <button id="processBtn" class="btn btn-primary" disabled>✨ Process PDFs</button>
+      <div id="uploadStatus" class="status-msg"></div>
+    </section>
+
+    <section class="panel">
+      <h2>📚 Your library</h2>
+      <div id="libraryPills" class="pills">
+        <span class="empty-hint">No PDFs yet</span>
+      </div>
+    </section>
+
+    <section class="panel stats-panel">
+      <div class="stat">
+        <div class="stat-num" id="statPdfs">0</div>
+        <div class="stat-label">PDFs</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="statChunks">0</div>
+        <div class="stat-label">Chunks</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="statQuestions">0</div>
+        <div class="stat-label">Questions</div>
+      </div>
+    </section>
+
+    <button id="clearChatBtn" class="btn btn-ghost">🗑️ Clear chat</button>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="chat">💬 Chat</button>
+      <button class="tab-btn" data-tab="history">🕒 History</button>
+    </nav>
+
+    <!-- CHAT TAB -->
+    <section id="tab-chat" class="tab-panel active">
+      <div id="chatEmpty" class="chat-empty">
+        <div class="chat-empty-icon">🩵</div>
+        <h3>Ask anything about your PDFs</h3>
+        <p>Upload documents on the left, then start chatting below.</p>
+        <div class="example-chips">
+          <button class="chip" data-q="Summarize this document">📝 Summarize this document</button>
+          <button class="chip" data-q="What are the key points?">🔑 Key points?</button>
+          <button class="chip" data-q="What questions does this answer?">❓ What does it answer?</button>
+        </div>
+      </div>
+
+      <div id="chatMessages" class="chat-messages"></div>
+
+      <form id="chatForm" class="chat-input-bar">
+        <input type="text" id="chatInput" placeholder="Ask a question about your PDFs..." autocomplete="off">
+        <button type="submit" class="btn btn-send">Send ➤</button>
+      </form>
+    </section>
+
+    <!-- HISTORY TAB -->
+    <section id="tab-history" class="tab-panel">
+      <div id="historyList" class="history-list">
+        <p class="empty-hint">No history yet — ask a question in the Chat tab first.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
