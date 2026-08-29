@@ -169,7 +169,6 @@ def get_unique_sources() -> list[str]:
     sources = {m["source"] for m in data["metadatas"]}
     return sorted(sources)
 
-
 def add_pdfs(pdf_paths: list[str]):
     collection = get_collection()
 
@@ -270,29 +269,31 @@ def log_history(question: str, answer: str, sources: list[str]):
         print(f"[warn] Could not write to history file: {e}")
 
 
+def load_history_records(last_n: int | None = None) -> list[dict]:
+    """Returns past Q&A records from HISTORY_FILE as a list of dicts."""
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
+    if last_n:
+        records = records[-last_n:]
+    return records
+
 def show_history(last_n: int | None = None):
     """Prints past Q&A records from HISTORY_FILE."""
-    if not os.path.exists(HISTORY_FILE):
+    records = load_history_records(last_n)
+
+    if not records:
         print("No history yet — ask some questions first.")
         return
 
-    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-        lines = [json.loads(line) for line in f if line.strip()]
-
-    if last_n:
-        lines = lines[-last_n:]
-
-    if not lines:
-        print("No history yet — ask some questions first.")
-        return
-
-    for i, rec in enumerate(lines, 1):
+    for i, rec in enumerate(records, 1):
         print(f"\n[{i}] {rec['timestamp']}")
         print(f"Q: {rec['question']}")
         print(f"A: {rec['answer']}")
         if rec.get("sources"):
             print(f"Sources: {', '.join(rec['sources'])}")
-    print(f"\n({len(lines)} record(s) shown)")
+    print(f"\n({len(records)} record(s) shown)")
 
 
 def answer_question(question: str, top_k: int = TOP_K, return_chunks: bool = False):
