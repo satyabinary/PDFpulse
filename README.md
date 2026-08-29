@@ -1,122 +1,150 @@
-# Multi-PDF RAG System
+# 🩵 PDFpulse — Multi-PDF RAG System
 
-Ingests multiple PDFs, chunks + embeds them locally, stores in ChromaDB, and
-answers your questions by retrieving relevant chunks and summarizing with a
-local LLM (Ollama) — no API key, no cost, works offline once set up.
+> Upload PDFs. Ask anything. Get grounded answers with citations — powered by your own local AI. No API keys. No cloud. Fully offline.
 
-## 1. Install dependencies
+---
 
-```bash
-pip install chromadb sentence-transformers pypdf ollama --break-system-packages
+## ✨ What it does
+
+PDFpulse lets you chat with your PDF documents using a local LLM (Ollama). Upload multiple PDFs, ask questions in plain English, and get accurate answers with source citations (filename + page number). Everything runs on your machine.
+
+---
+
+## 📁 Project Structure
+
+```
+PDFpulse/
+├── rag_system.py        # Core logic — PDF parsing, chunking, ChromaDB, Ollama
+├── server.py            # Flask backend — REST API
+├── templates/
+│   └── index.html       # Frontend HTML
+├── static/
+│   ├── style.css        # Custom CSS (colorful/playful theme)
+│   └── app.js           # Frontend JavaScript
+├── chroma_db/           # Auto-created — vector database (don't delete)
+├── history.jsonl        # Auto-created — Q&A log
+└── README.md            # You are here
 ```
 
-## 2. Install Ollama (local LLM runner)
+---
 
-- Download: https://ollama.com/download
-- Then pull a model:
+## ⚙️ Setup (one time)
+
+### 1. Create & activate virtual environment
 ```bash
-ollama pull llama3        # good general model, ~4.7GB
-# or a smaller/faster one:
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# Mac/Linux
+source .venv/bin/activate
+```
+
+### 2. Install dependencies
+```bash
+pip install flask chromadb sentence-transformers pypdf ollama
+```
+
+### 3. Install Ollama (local LLM)
+Download from 👉 https://ollama.com/download
+
+Then pull a model:
+```bash
+ollama pull llama3       # recommended (~4.7GB)
+# OR smaller/faster:
 ollama pull phi3
-```
-Ollama runs a local server automatically after install (`ollama serve` if not).
-
-## 3. Add PDFs to the knowledge base
-
-```bash
-python rag_system.py --add report1.pdf report2.pdf notes.pdf
+ollama pull mistral
 ```
 
-This extracts text page-by-page, splits into ~800-char overlapping chunks,
-embeds them with `all-MiniLM-L6-v2`, and stores them in a local ChromaDB
-folder (`./chroma_db`) — persists across runs.
+---
 
-## Web UI (recommended — full custom HTML/CSS/JS, no framework restrictions)
+## 🚀 Running the app
 
-A proper browser-based UI is included: a Flask backend (`server.py`) that
-reuses all the logic from `rag_system.py`, plus a hand-built frontend
-(`templates/index.html`, `static/style.css`, `static/app.js`) — a real
-webpage with drag-and-drop upload, a chat interface, source-chunk previews,
-and a history tab.
-
-Install (one extra package):
-```bash
-pip install flask --break-system-packages
-```
-
-Run:
 ```bash
 python server.py
 ```
 
 Then open **http://localhost:5000** in your browser.
 
-Folder structure needed (already set up if you keep all the provided files together):
+> **Note:** First time you upload a PDF, the embedding model (~90MB) will be downloaded automatically from HuggingFace. This is a one-time download.
+
+---
+
+## 🖥️ Web UI
+
+| Feature | Description |
+|---|---|
+| 📤 Drag & Drop Upload | Drop PDFs in the sidebar, click Process |
+| 📊 Live Stats | PDFs loaded, chunks indexed, questions asked |
+| 📚 Library View | All your uploaded PDFs shown as pills |
+| 💬 Chat Interface | Chat bubbles with avatars, smooth animations |
+| 📎 Source Preview | Expand to see exact text chunks used for each answer |
+| 🕒 History Tab | All past Q&A, click to expand |
+
+---
+
+## 💻 CLI Usage (terminal)
+
+Add PDFs:
+```bash
+python rag_system.py --add file1.pdf file2.pdf
 ```
-PDFpulse/
-├── rag_system.py
-├── server.py
-├── templates/
-│   └── index.html
-└── static/
-    ├── style.css
-    └── app.js
-```
 
-What you get:
-- **Sidebar** — drag-and-drop PDF upload, live stats (PDFs / chunks / questions), your document library as pills
-- **Chat tab** — real chat bubbles with avatars, example question chips, expandable "sources used" under each answer
-- **History tab** — click any past question to expand its full answer + sources
-
-The CLI (`rag_system.py`) still works exactly as before if you prefer the terminal.
-
-## CLI usage (terminal)
-
-
-Interactive mode:
+Interactive Q&A session:
 ```bash
 python rag_system.py --ask
 ```
 
-One-off question:
+Single question:
 ```bash
-python rag_system.py --question "What are the main findings in report1?"
+python rag_system.py --question "What is this document about?"
 ```
 
-Each answer cites which PDF + page number the info came from.
-
-## How it works
-
-1. **Extract** — `pypdf` pulls text per page from each PDF.
-2. **Chunk** — sliding window (800 chars, 150 overlap) keeps context intact across boundaries.
-3. **Embed + Store** — `sentence-transformers` embeds chunks, ChromaDB stores them persistently with metadata (source file, page number).
-4. **Retrieve** — on a question, top-5 most similar chunks are pulled via vector similarity.
-5. **Answer** — chunks + question are sent to a local LLM (Ollama) which answers using only that context, with citations.
-
-## History
-
-Every question + answer gets logged to `./history.jsonl` (one JSON record
-per line, with timestamp + sources used).
-
-View it:
+View history:
 ```bash
-python rag_system.py --history        # all history
-python rag_system.py --history 5      # last 5 entries only
+python rag_system.py --history        # all
+python rag_system.py --history 5      # last 5 only
 ```
 
-Or inside `--ask` mode, just type `history` at the prompt.
+---
 
-## Customize
+## 🔧 Customize
 
-Edit the config block at the top of `rag_system.py`:
-- `CHUNK_SIZE` / `CHUNK_OVERLAP` — tune for longer/shorter documents
-- `TOP_K` — how many chunks to retrieve per question
-- `OLLAMA_MODEL` — swap `llama3` for `mistral`, `phi3`, `gemma2`, etc.
-- `EMBED_MODEL` — swap for a different sentence-transformers model
+Open `rag_system.py` and edit the config block at the top:
 
-## Notes
+| Setting | Default | What it does |
+|---|---|---|
+| `CHUNK_SIZE` | `800` | Characters per chunk |
+| `CHUNK_OVERLAP` | `150` | Overlap between chunks |
+| `TOP_K` | `5` | Chunks retrieved per question |
+| `OLLAMA_MODEL` | `llama3` | Swap to `phi3`, `mistral`, `gemma2` etc. |
+| `EMBED_MODEL` | `all-MiniLM-L6-v2` | Sentence embedding model |
 
-- Scanned/image-only PDFs won't extract text (no OCR built in) — the script
-  will skip them and tell you.
-- First run downloads the embedding model (~90MB) from Hugging Face — needs
-  internet once, then it's cached locally.
+---
+
+## ❓ Troubleshooting
+
+**`ModuleNotFoundError`** — Make sure your venv is activated (`(.venv)` in terminal) and run `pip install flask chromadb sentence-transformers pypdf ollama`
+
+**Ollama error** — Make sure Ollama is running. Try `ollama serve` in a separate terminal, and confirm your model is pulled with `ollama list`
+
+**Scanned PDFs not working** — PDFpulse extracts text only. Image-based/scanned PDFs need OCR (not included)
+
+**First upload is slow** — Normal! The embedding model is downloading (~90MB, one time only)
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Tech |
+|---|---|
+| PDF parsing | `pypdf` |
+| Text chunking | Custom sentence-aware chunker (built-in `re`) |
+| Embeddings | `sentence-transformers` (`all-MiniLM-L6-v2`) |
+| Vector DB | `ChromaDB` (local, persistent) |
+| LLM | `Ollama` (local, any model) |
+| Backend | `Flask` |
+| Frontend | Vanilla HTML + CSS + JS |
+
+---
