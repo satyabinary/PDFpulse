@@ -169,6 +169,7 @@ def get_unique_sources() -> list[str]:
     sources = {m["source"] for m in data["metadatas"]}
     return sorted(sources)
 
+
 def add_pdfs(pdf_paths: list[str]):
     collection = get_collection()
 
@@ -270,14 +271,35 @@ def log_history(question: str, answer: str, sources: list[str]):
 
 
 def load_history_records(last_n: int | None = None) -> list[dict]:
-    """Returns past Q&A records from HISTORY_FILE as a list of dicts."""
+    """Returns past Q&A records from HISTORY_FILE as a list of dicts
+    (oldest first). Reusable by both the CLI and the web server."""
     if not os.path.exists(HISTORY_FILE):
         return []
+
     with open(HISTORY_FILE, "r", encoding="utf-8") as f:
         records = [json.loads(line) for line in f if line.strip()]
+
     if last_n:
         records = records[-last_n:]
     return records
+
+
+def search_history(query: str) -> list[dict]:
+    """Search past Q&A records by keyword(s). Matches against both question
+    and answer text, case-insensitive. Multiple words = AND search (all words
+    must appear somewhere in question or answer)."""
+    records = load_history_records()
+    if not records or not query.strip():
+        return records
+
+    keywords = query.lower().split()
+    results = []
+    for rec in records:
+        haystack = (rec.get("question", "") + " " + rec.get("answer", "")).lower()
+        if all(kw in haystack for kw in keywords):
+            results.append(rec)
+    return list(reversed(results))  # newest first
+
 
 def show_history(last_n: int | None = None):
     """Prints past Q&A records from HISTORY_FILE."""
@@ -342,6 +364,8 @@ def main():
     parser.add_argument("--question", type=str, help="Ask a single question and exit")
     parser.add_argument("--history", nargs="?", const=-1, type=int, metavar="N",
                          help="Show past Q&A history (optionally last N entries)")
+    parser.add_argument("--search-history", type=str, metavar="QUERY",
+                         help="Search past Q&A history by keyword(s)")
     args = parser.parse_args()
 
     if args.add:
@@ -353,8 +377,21 @@ def main():
         interactive_loop()
     elif args.history is not None:
         show_history(None if args.history == -1 else args.history)
+    elif args.search_history:
+        results = search_history(args.search_history)
+        if not results:
+            print(f"No history found matching: '{args.search_history}'")
+        else:
+            print(f"Found {len(results)} result(s) for '{args.search_history}':\n")
+            for i, rec in enumerate(results, 1):
+                print(f"[{i}] {rec['timestamp']}")
+                print(f"Q: {rec['question']}")
+                print(f"A: {rec['answer'][:300]}{'...' if len(rec['answer']) > 300 else ''}")
+                if rec.get("sources"):
+                    print(f"Sources: {', '.join(rec['sources'])}")
+                print()
 
-    if not (args.add or args.ask or args.question or args.history is not None):
+    if not (args.add or args.ask or args.question or args.history is not None or args.search_history):
         parser.print_help()
 
 
