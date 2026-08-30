@@ -25,6 +25,7 @@ from rag_system import (
     get_collection,
     get_unique_sources,
     load_history_records,
+    search_history,
 )
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
@@ -119,6 +120,16 @@ def api_ask():
 def api_history():
     records = load_history_records()
     return jsonify({"history": list(reversed(records))})
+
+
+@app.route("/api/history/search")
+def api_history_search():
+    """?q=keyword — searches past Q&A by keyword(s), returns newest first."""
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"error": "Query param 'q' is required"}), 400
+    results = search_history(query)
+    return jsonify({"query": query, "count": len(results), "results": results})
 
 
 if __name__ == "__main__":
