@@ -94,6 +94,12 @@
 
     <!-- HISTORY TAB -->
     <section id="tab-history" class="tab-panel">
+      <div class="history-search-bar">
+        <input type="text" id="historySearch" placeholder="🔍 Search past Q&A by keyword...">
+        <button id="historySearchBtn" class="btn btn-send">Search</button>
+        <button id="historyClearSearch" class="btn btn-ghost" style="display:none; width:auto; margin:0; padding:10px 16px;">✕ Clear</button>
+      </div>
+      <div id="historySearchInfo" class="history-search-info"></div>
       <div id="historyList" class="history-list">
         <p class="empty-hint">No history yet — ask a question in the Chat tab first.</p>
       </div>
