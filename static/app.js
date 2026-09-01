@@ -227,17 +227,42 @@ clearChatBtn.addEventListener("click", () => {
 // ============================================================
 // History
 // ============================================================
-async function loadHistory() {
+const historySearchInput = document.getElementById("historySearch");
+const historySearchBtn = document.getElementById("historySearchBtn");
+const historyClearSearch = document.getElementById("historyClearSearch");
+const historySearchInfo = document.getElementById("historySearchInfo");
+
+async function loadHistory(query = "") {
   try {
-    const res = await fetch("/api/history");
+    let url = "/api/history";
+    if (query) url = `/api/history/search?q=${encodeURIComponent(query)}`;
+
+    const res = await fetch(url);
     const data = await res.json();
 
-    if (!data.history || data.history.length === 0) {
-      historyList.innerHTML = `<p class="empty-hint">No history yet — ask a question in the Chat tab first.</p>`;
+    const records = query ? data.results : data.history;
+
+    // Update info bar
+    if (query) {
+      historySearchInfo.innerHTML = records.length > 0
+        ? `Found <span class="highlight">${records.length}</span> result(s) for "<span class="highlight">${escapeHtml(query)}</span>"`
+        : `No results found for "<span class="highlight">${escapeHtml(query)}</span>"`;
+      historyClearSearch.style.display = "inline-block";
+    } else {
+      historySearchInfo.innerHTML = records && records.length > 0
+        ? `<span class="highlight">${records.length}</span> total Q&A recorded`
+        : "";
+      historyClearSearch.style.display = "none";
+    }
+
+    if (!records || records.length === 0) {
+      historyList.innerHTML = query
+        ? `<p class="empty-hint">No matching history found — try a different keyword.</p>`
+        : `<p class="empty-hint">No history yet — ask a question in the Chat tab first.</p>`;
       return;
     }
 
-    historyList.innerHTML = data.history.map(rec => `
+    historyList.innerHTML = records.map(rec => `
       <div class="history-item">
         <div class="h-question">🗨️ ${escapeHtml(rec.question)}</div>
         <div class="h-time">${escapeHtml(rec.timestamp)}</div>
@@ -253,6 +278,25 @@ async function loadHistory() {
     historyList.innerHTML = `<p class="empty-hint">Failed to load history.</p>`;
   }
 }
+
+historySearchBtn.addEventListener("click", () => {
+  const q = historySearchInput.value.trim();
+  loadHistory(q);
+});
+
+historySearchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const q = historySearchInput.value.trim();
+    loadHistory(q);
+  }
+});
+
+historyClearSearch.addEventListener("click", () => {
+  historySearchInput.value = "";
+  historyClearSearch.style.display = "none";
+  historySearchInfo.innerHTML = "";
+  loadHistory();
+});
 
 // ============================================================
 // Utils
