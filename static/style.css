@@ -338,6 +338,57 @@ h1, h2, h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; margin: 0; }
 }
 .btn-send:hover { transform: translateY(-1px); }
 
+/* Chat export toolbar */
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+.toolbar-label {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.toolbar-btn {
+  border: 1.5px solid var(--border);
+  background: white;
+  color: var(--ink);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'Inter', sans-serif;
+}
+.toolbar-btn:hover {
+  border-color: var(--purple);
+  color: var(--purple);
+  transform: translateY(-1px);
+}
+
+/* Print styles for PDF export */
+@media print {
+  .sidebar, .tabs, .chat-toolbar, .chat-input-bar, .chat-empty,
+  .bg-blob, nav, .sources-toggle, .sources-box { display: none !important; }
+  body { background: white !important; overflow: visible !important; }
+  .app { display: block !important; }
+  .main { padding: 0 !important; overflow: visible !important; }
+  .tab-panel { display: block !important; overflow: visible !important; }
+  #tab-history { display: none !important; }
+  .chat-messages { overflow: visible !important; max-height: none !important; }
+  .msg { page-break-inside: avoid; }
+  .msg.user .bubble { background: #fff9db !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .msg.assistant .bubble { background: #f8f4ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .avatar { display: none !important; }
+}
+
 /* History search */
 .history-search-bar {
   display: flex;
