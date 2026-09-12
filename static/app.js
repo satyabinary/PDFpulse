@@ -150,6 +150,7 @@ chatForm.addEventListener("submit", async (e) => {
   if (!question) return;
 
   chatEmpty.style.display = "none";
+  document.getElementById("chatToolbar").style.display = "flex";
   addMessage("user", question);
   chatInput.value = "";
 
@@ -222,6 +223,53 @@ function updateMessage(msgRef, text, chunks) {
 clearChatBtn.addEventListener("click", () => {
   chatMessages.innerHTML = "";
   chatEmpty.style.display = "flex";
+  document.getElementById("chatToolbar").style.display = "none";
+});
+
+// ============================================================
+// Export chat
+// ============================================================
+const chatToolbar = document.getElementById("chatToolbar");
+const exportTxt = document.getElementById("exportTxt");
+const exportPdf = document.getElementById("exportPdf");
+
+// Plain text export — builds a .txt file and triggers download
+exportTxt.addEventListener("click", () => {
+  const messages = chatMessages.querySelectorAll(".msg");
+  if (!messages.length) return;
+
+  const lines = [`PDFpulse — Chat Export`, `Generated: ${new Date().toLocaleString()}`, `${"=".repeat(50)}\n`];
+
+  messages.forEach(msg => {
+    const role = msg.classList.contains("user") ? "You" : "PDFpulse";
+    const text = msg.querySelector(".bubble")?.textContent?.trim() || "";
+    lines.push(`[${role}]\n${text}\n`);
+
+    // Include sources if expanded
+    const chunks = msg.querySelectorAll(".source-chunk");
+    if (chunks.length) {
+      lines.push("Sources used:");
+      chunks.forEach(c => {
+        const meta = c.querySelector(".meta")?.textContent?.trim() || "";
+        const body = c.textContent.replace(meta, "").trim();
+        lines.push(`  • ${meta}: ${body.slice(0, 200)}${body.length > 200 ? "..." : ""}`);
+      });
+      lines.push("");
+    }
+  });
+
+  const blob = new Blob([lines.join("\n")], { type: "text/plain; charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `pdfpulse-chat-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// PDF export — uses browser's built-in print dialog (Save as PDF)
+exportPdf.addEventListener("click", () => {
+  window.print();
 });
 
 // ============================================================
