@@ -1,29 +1,57 @@
 // ============================================================
-// PDFpulse frontend logic — talks to the Flask API (/api/...)
+// PDFpulse — Frontend Logic
 // ============================================================
 
-const state = {
-  pendingFiles: [],
-};
+const state = { pendingFiles: [] };
 
 // ---------- Elements ----------
-const dropzone = document.getElementById("dropzone");
-const fileInput = document.getElementById("fileInput");
-const fileListEl = document.getElementById("fileList");
-const processBtn = document.getElementById("processBtn");
-const uploadStatus = document.getElementById("uploadStatus");
-const libraryPills = document.getElementById("libraryPills");
-const statPdfs = document.getElementById("statPdfs");
-const statChunks = document.getElementById("statChunks");
-const statQuestions = document.getElementById("statQuestions");
+const dropzone       = document.getElementById("dropzone");
+const fileInput      = document.getElementById("fileInput");
+const fileListEl     = document.getElementById("fileList");
+const processBtn     = document.getElementById("processBtn");
+const uploadStatus   = document.getElementById("uploadStatus");
+const libraryPills   = document.getElementById("libraryPills");
+const statPdfs       = document.getElementById("statPdfs");
+const statChunks     = document.getElementById("statChunks");
+const statQuestions  = document.getElementById("statQuestions");
+const chatEmpty      = document.getElementById("chatEmpty");
+const chatMessages   = document.getElementById("chatMessages");
+const chatForm       = document.getElementById("chatForm");
+const chatInput      = document.getElementById("chatInput");
+const clearChatBtn   = document.getElementById("clearChatBtn");
+const chatToolbar    = document.getElementById("chatToolbar");
+const exportTxt      = document.getElementById("exportTxt");
+const exportPdf      = document.getElementById("exportPdf");
+const historyList    = document.getElementById("historyList");
+const historySearch  = document.getElementById("historySearch");
+const historySearchBtn   = document.getElementById("historySearchBtn");
+const historyClearSearch = document.getElementById("historyClearSearch");
+const historySearchInfo  = document.getElementById("historySearchInfo");
+const statusDot  = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
 
-const chatEmpty = document.getElementById("chatEmpty");
-const chatMessages = document.getElementById("chatMessages");
-const chatForm = document.getElementById("chatForm");
-const chatInput = document.getElementById("chatInput");
-const clearChatBtn = document.getElementById("clearChatBtn");
+// ============================================================
+// Status indicator (top right)
+// ============================================================
+const SARCASTIC_IDLE = [
+  "idle — waiting for you",
+  "staring into the void",
+  "ready. are you?",
+  "doing absolutely nothing",
+  "standing by, as always",
+];
 
-const historyList = document.getElementById("historyList");
+function setStatus(state, text) {
+  statusDot.className = "status-dot" + (state ? ` ${state}` : "");
+  statusText.textContent = text;
+}
+
+function setIdleStatus() {
+  const msg = SARCASTIC_IDLE[Math.floor(Math.random() * SARCASTIC_IDLE.length)];
+  setStatus("", msg);
+}
+
+setIdleStatus();
 
 // ============================================================
 // Tabs
@@ -39,7 +67,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 });
 
 // ============================================================
-// File upload (drag & drop + browse)
+// File upload — drag & drop + browse
 // ============================================================
 dropzone.addEventListener("click", () => fileInput.click());
 
@@ -56,13 +84,16 @@ dropzone.addEventListener("drop", (e) => {
 
 fileInput.addEventListener("change", () => {
   addFiles(fileInput.files);
-  fileInput.value = ""; // allow re-selecting the same file
+  fileInput.value = "";
 });
 
 function addFiles(fileListObj) {
   for (const f of fileListObj) {
     if (f.name.toLowerCase().endsWith(".pdf")) {
-      state.pendingFiles.push(f);
+      // no duplicates
+      if (!state.pendingFiles.find(x => x.name === f.name)) {
+        state.pendingFiles.push(f);
+      }
     }
   }
   renderFileList();
@@ -72,70 +103,88 @@ function renderFileList() {
   fileListEl.innerHTML = "";
   state.pendingFiles.forEach((f, idx) => {
     const li = document.createElement("li");
-    li.innerHTML = `<span>📄 ${f.name}</span><span class="remove" data-idx="${idx}">✕</span>`;
+    li.innerHTML = `<span>◈ ${escapeHtml(f.name)}</span><span class="remove" data-idx="${idx}">✕</span>`;
     fileListEl.appendChild(li);
   });
   fileListEl.querySelectorAll(".remove").forEach(el => {
     el.addEventListener("click", (e) => {
-      const idx = parseInt(e.target.dataset.idx, 10);
-      state.pendingFiles.splice(idx, 1);
+      state.pendingFiles.splice(parseInt(e.target.dataset.idx, 10), 1);
       renderFileList();
     });
   });
   processBtn.disabled = state.pendingFiles.length === 0;
 }
 
+// ============================================================
+// Process PDFs
+// ============================================================
+const SARCASTIC_UPLOAD = [
+  "fine, i'll read it",
+  "indexing your docs...",
+  "chunking away...",
+  "embedding... this takes a sec",
+  "please hold. or don't. i'll finish either way.",
+];
+
 processBtn.addEventListener("click", async () => {
-  if (state.pendingFiles.length === 0) return;
+  if (!state.pendingFiles.length) return;
 
   processBtn.disabled = true;
-  uploadStatus.textContent = `🔮 Processing ${state.pendingFiles.length} file(s)... this can take a bit on first run.`;
+  const msg = SARCASTIC_UPLOAD[Math.floor(Math.random() * SARCASTIC_UPLOAD.length)];
+  setStatus("active", "processing...");
+  uploadStatus.textContent = `⟳ ${msg}`;
   uploadStatus.className = "status-msg loading";
 
   const formData = new FormData();
   state.pendingFiles.forEach(f => formData.append("files", f));
 
   try {
-    const res = await fetch("/api/upload", { method: "POST", body: formData });
+    const res  = await fetch("/api/upload", { method: "POST", body: formData });
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "upload failed");
 
-    if (!res.ok) throw new Error(data.error || "Upload failed");
-
-    uploadStatus.textContent = `✅ Added ${data.processed.length} file(s) — ${data.chunk_count} chunks indexed.`;
+    uploadStatus.textContent = `✓ indexed ${data.processed.length} file(s) — ${data.chunk_count} chunks total`;
     uploadStatus.className = "status-msg success";
     state.pendingFiles = [];
     renderFileList();
     refreshStatus();
+    setStatus("ready", "docs loaded");
   } catch (err) {
-    uploadStatus.textContent = `❌ ${err.message}`;
+    uploadStatus.textContent = `✗ ${err.message}`;
     uploadStatus.className = "status-msg error";
     processBtn.disabled = false;
+    setIdleStatus();
   }
 });
 
 // ============================================================
-// Status / stats / library
+// Stats & library
 // ============================================================
 async function refreshStatus() {
   try {
-    const res = await fetch("/api/status");
+    const res  = await fetch("/api/status");
     const data = await res.json();
-    statPdfs.textContent = data.pdf_count;
-    statChunks.textContent = data.chunk_count;
+
+    statPdfs.textContent      = data.pdf_count;
+    statChunks.textContent    = data.chunk_count;
     statQuestions.textContent = data.question_count;
 
     if (data.sources && data.sources.length > 0) {
-      libraryPills.innerHTML = data.sources.map(s => `<span class="pill">📄 ${escapeHtml(s)}</span>`).join("");
+      libraryPills.innerHTML = data.sources
+        .map(s => `<span class="pill">◈ ${escapeHtml(s)}</span>`)
+        .join("");
+      setStatus("ready", `${data.pdf_count} doc(s) loaded`);
     } else {
-      libraryPills.innerHTML = `<span class="empty-hint">No PDFs yet</span>`;
+      libraryPills.innerHTML = `<span class="empty-hint">nothing here yet. upload something.</span>`;
+      setIdleStatus();
     }
   } catch (err) {
-    console.error("Failed to refresh status", err);
+    console.error("status fetch failed", err);
   }
 }
 
 // ============================================================
-// Chat
+// Chat — example chips
 // ============================================================
 document.querySelectorAll(".chip").forEach(chip => {
   chip.addEventListener("click", () => {
@@ -144,51 +193,74 @@ document.querySelectorAll(".chip").forEach(chip => {
   });
 });
 
+// ============================================================
+// Chat — send message
+// ============================================================
+const SARCASTIC_THINKING = [
+  "hold on, actually reading this...",
+  "consulting the void...",
+  "processing. patience is a virtue.",
+  "cross-referencing your docs...",
+  "thinking... unlike some people.",
+];
+
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const question = chatInput.value.trim();
   if (!question) return;
 
-  chatEmpty.style.display = "none";
-  document.getElementById("chatToolbar").style.display = "flex";
+  chatEmpty.style.display  = "none";
+  chatToolbar.style.display = "flex";
   addMessage("user", question);
   chatInput.value = "";
 
-  const thinkingEl = addMessage("assistant", "Thinking...", { thinking: true });
+  const thinkingMsg = SARCASTIC_THINKING[Math.floor(Math.random() * SARCASTIC_THINKING.length)];
+  setStatus("active", "thinking...");
+  const thinkingEl = addMessage("assistant", thinkingMsg, { thinking: true });
 
   try {
-    const res = await fetch("/api/ask", {
+    const res  = await fetch("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    if (!res.ok) throw new Error(data.error || "something went wrong");
 
     updateMessage(thinkingEl, data.answer, data.chunks || []);
     refreshStatus();
+    setStatus("ready", "answered");
+    setTimeout(setIdleStatus, 3000);
   } catch (err) {
-    updateMessage(thinkingEl, `❌ ${err.message}`, []);
+    updateMessage(thinkingEl, `✗ ${err.message}`, []);
+    setStatus("", "error");
+    setTimeout(setIdleStatus, 3000);
   }
 });
 
 function addMessage(role, text, opts = {}) {
-  const msg = document.createElement("div");
+  const msg    = document.createElement("div");
   msg.className = `msg ${role}`;
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = role === "user" ? "🙋" : "🩵";
+  avatar.textContent = role === "user" ? "you" : "ai";
+
+  const wrap   = document.createElement("div");
+  wrap.className = "bubble-wrap";
 
   const bubble = document.createElement("div");
   bubble.className = "bubble" + (opts.thinking ? " thinking" : "");
-  bubble.textContent = text;
 
-  const wrap = document.createElement("div");
+  if (opts.thinking) {
+    bubble.innerHTML = `${escapeHtml(text)} <span class="thinking-dots"></span>`;
+  } else {
+    bubble.textContent = text;
+  }
+
   wrap.appendChild(bubble);
   msg.appendChild(avatar);
   msg.appendChild(wrap);
-
   chatMessages.appendChild(msg);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return { msg, bubble, wrap };
@@ -201,18 +273,21 @@ function updateMessage(msgRef, text, chunks) {
   if (chunks && chunks.length > 0) {
     const toggle = document.createElement("div");
     toggle.className = "sources-toggle";
-    toggle.textContent = `📎 View ${chunks.length} source(s) used ▾`;
+    toggle.innerHTML = `<span>▸</span> ${chunks.length} source(s) used`;
 
     const box = document.createElement("div");
     box.className = "sources-box";
     box.innerHTML = chunks.map(c => `
       <div class="source-chunk">
-        <div class="meta">📄 ${escapeHtml(c.source)} · page ${c.page}</div>
-        ${escapeHtml(c.text.slice(0, 400))}${c.text.length > 400 ? "..." : ""}
+        <div class="meta">◈ ${escapeHtml(c.source)} · p.${c.page}</div>
+        ${escapeHtml(c.text.slice(0, 380))}${c.text.length > 380 ? "..." : ""}
       </div>
     `).join("");
 
-    toggle.addEventListener("click", () => box.classList.toggle("open"));
+    toggle.addEventListener("click", () => {
+      const open = box.classList.toggle("open");
+      toggle.querySelector("span").textContent = open ? "▾" : "▸";
+    });
 
     msgRef.wrap.appendChild(toggle);
     msgRef.wrap.appendChild(box);
@@ -220,102 +295,93 @@ function updateMessage(msgRef, text, chunks) {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// ============================================================
+// Clear chat
+// ============================================================
 clearChatBtn.addEventListener("click", () => {
-  chatMessages.innerHTML = "";
-  chatEmpty.style.display = "flex";
-  document.getElementById("chatToolbar").style.display = "none";
+  chatMessages.innerHTML   = "";
+  chatEmpty.style.display  = "flex";
+  chatToolbar.style.display = "none";
+  setIdleStatus();
 });
 
 // ============================================================
-// Export chat
+// Export — text file
 // ============================================================
-const chatToolbar = document.getElementById("chatToolbar");
-const exportTxt = document.getElementById("exportTxt");
-const exportPdf = document.getElementById("exportPdf");
-
-// Plain text export — builds a .txt file and triggers download
 exportTxt.addEventListener("click", () => {
   const messages = chatMessages.querySelectorAll(".msg");
   if (!messages.length) return;
 
-  const lines = [`PDFpulse — Chat Export`, `Generated: ${new Date().toLocaleString()}`, `${"=".repeat(50)}\n`];
+  const lines = [
+    `PDFpulse — Chat Export`,
+    `Generated: ${new Date().toLocaleString()}`,
+    `${"─".repeat(50)}`,
+    "",
+  ];
 
   messages.forEach(msg => {
-    const role = msg.classList.contains("user") ? "You" : "PDFpulse";
-    const text = msg.querySelector(".bubble")?.textContent?.trim() || "";
+    const role   = msg.classList.contains("user") ? "YOU" : "PDFPULSE";
+    const text   = msg.querySelector(".bubble")?.textContent?.trim() || "";
     lines.push(`[${role}]\n${text}\n`);
 
-    // Include sources if expanded
-    const chunks = msg.querySelectorAll(".source-chunk");
-    if (chunks.length) {
-      lines.push("Sources used:");
-      chunks.forEach(c => {
-        const meta = c.querySelector(".meta")?.textContent?.trim() || "";
-        const body = c.textContent.replace(meta, "").trim();
-        lines.push(`  • ${meta}: ${body.slice(0, 200)}${body.length > 200 ? "..." : ""}`);
-      });
-      lines.push("");
-    }
+    msg.querySelectorAll(".source-chunk").forEach(c => {
+      const meta = c.querySelector(".meta")?.textContent?.trim() || "";
+      const body = c.textContent.replace(meta, "").trim();
+      lines.push(`  source: ${meta}\n  ${body.slice(0, 200)}...\n`);
+    });
   });
 
-  const blob = new Blob([lines.join("\n")], { type: "text/plain; charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `pdfpulse-chat-${new Date().toISOString().slice(0,10)}.txt`;
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `pdfpulse-${new Date().toISOString().slice(0,10)}.txt`;
   a.click();
   URL.revokeObjectURL(url);
 });
 
-// PDF export — uses browser's built-in print dialog (Save as PDF)
-exportPdf.addEventListener("click", () => {
-  window.print();
-});
+// Export — PDF via browser print
+exportPdf.addEventListener("click", () => window.print());
 
 // ============================================================
 // History
 // ============================================================
-const historySearchInput = document.getElementById("historySearch");
-const historySearchBtn = document.getElementById("historySearchBtn");
-const historyClearSearch = document.getElementById("historyClearSearch");
-const historySearchInfo = document.getElementById("historySearchInfo");
-
 async function loadHistory(query = "") {
   try {
-    let url = "/api/history";
-    if (query) url = `/api/history/search?q=${encodeURIComponent(query)}`;
-
-    const res = await fetch(url);
+    const url  = query
+      ? `/api/history/search?q=${encodeURIComponent(query)}`
+      : "/api/history";
+    const res  = await fetch(url);
     const data = await res.json();
-
     const records = query ? data.results : data.history;
 
-    // Update info bar
     if (query) {
-      historySearchInfo.innerHTML = records.length > 0
-        ? `Found <span class="highlight">${records.length}</span> result(s) for "<span class="highlight">${escapeHtml(query)}</span>"`
-        : `No results found for "<span class="highlight">${escapeHtml(query)}</span>"`;
-      historyClearSearch.style.display = "inline-block";
+      historySearchInfo.innerHTML = records.length
+        ? `found <span class="highlight">${records.length}</span> result(s) for "<span class="highlight">${escapeHtml(query)}</span>"`
+        : `nothing found for "<span class="highlight">${escapeHtml(query)}</span>" — try another keyword`;
+      historyClearSearch.style.display = "inline-flex";
     } else {
-      historySearchInfo.innerHTML = records && records.length > 0
-        ? `<span class="highlight">${records.length}</span> total Q&A recorded`
+      historySearchInfo.innerHTML = records && records.length
+        ? `<span class="highlight">${records.length}</span> total queries on record`
         : "";
       historyClearSearch.style.display = "none";
     }
 
-    if (!records || records.length === 0) {
+    if (!records || !records.length) {
       historyList.innerHTML = query
-        ? `<p class="empty-hint">No matching history found — try a different keyword.</p>`
-        : `<p class="empty-hint">No history yet — ask a question in the Chat tab first.</p>`;
+        ? `<p class="empty-hint">no matches. are you sure you asked that?</p>`
+        : `<p class="empty-hint">no history yet. start a conversation.</p>`;
       return;
     }
 
     historyList.innerHTML = records.map(rec => `
       <div class="history-item">
-        <div class="h-question">🗨️ ${escapeHtml(rec.question)}</div>
+        <div class="h-question">${escapeHtml(rec.question)}</div>
         <div class="h-time">${escapeHtml(rec.timestamp)}</div>
         <div class="h-answer">${escapeHtml(rec.answer)}</div>
-        <div class="h-sources">${(rec.sources || []).map(s => `<span class="pill">📄 ${escapeHtml(s)}</span>`).join("")}</div>
+        <div class="h-sources">
+          ${(rec.sources || []).map(s => `<span class="pill">${escapeHtml(s)}</span>`).join("")}
+        </div>
       </div>
     `).join("");
 
@@ -323,24 +389,14 @@ async function loadHistory(query = "") {
       item.addEventListener("click", () => item.classList.toggle("open"));
     });
   } catch (err) {
-    historyList.innerHTML = `<p class="empty-hint">Failed to load history.</p>`;
+    historyList.innerHTML = `<p class="empty-hint">failed to load history. classic.</p>`;
   }
 }
 
-historySearchBtn.addEventListener("click", () => {
-  const q = historySearchInput.value.trim();
-  loadHistory(q);
-});
-
-historySearchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    const q = historySearchInput.value.trim();
-    loadHistory(q);
-  }
-});
-
+historySearchBtn.addEventListener("click",  () => loadHistory(historySearch.value.trim()));
+historySearch.addEventListener("keydown", e => { if (e.key === "Enter") loadHistory(historySearch.value.trim()); });
 historyClearSearch.addEventListener("click", () => {
-  historySearchInput.value = "";
+  historySearch.value = "";
   historyClearSearch.style.display = "none";
   historySearchInfo.innerHTML = "";
   loadHistory();
@@ -350,9 +406,9 @@ historyClearSearch.addEventListener("click", () => {
 // Utils
 // ============================================================
 function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
 }
 
 // ============================================================
