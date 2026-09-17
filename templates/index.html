@@ -3,111 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDFpulse — Multi-PDF RAG</title>
+<title>PDFpulse — Yeah, it reads PDFs</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<div class="bg-blob blob-1"></div>
-<div class="bg-blob blob-2"></div>
-<div class="bg-blob blob-3"></div>
+<div class="noise"></div>
+<div class="glow glow-1"></div>
+<div class="glow glow-2"></div>
 
 <div class="app">
 
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
+
     <div class="brand">
-      <div class="brand-icon">🩵</div>
-      <div>
+      <div class="brand-logo">
+        <span class="logo-symbol">⚡</span>
+      </div>
+      <div class="brand-text">
         <h1>PDFpulse</h1>
-        <p>Local multi-PDF RAG</p>
+        <p class="brand-sub">// reads your boring PDFs so you don't have to</p>
       </div>
     </div>
 
+    <div class="divider"></div>
+
     <section class="panel">
-      <h2>📤 Add documents</h2>
+      <div class="panel-label">01 — DROP ZONE</div>
       <label class="dropzone" id="dropzone">
         <input type="file" id="fileInput" accept=".pdf" multiple hidden>
-        <div class="dropzone-icon">📄</div>
-        <div class="dropzone-text">Drop PDFs here or <span>browse</span></div>
+        <div class="dz-inner">
+          <div class="dz-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div class="dz-text">drag PDFs or <span>click to browse</span></div>
+          <div class="dz-sub">yes, multiple files are fine</div>
+        </div>
       </label>
       <ul id="fileList" class="file-list"></ul>
-      <button id="processBtn" class="btn btn-primary" disabled>✨ Process PDFs</button>
+      <button id="processBtn" class="btn btn-primary" disabled>
+        <span class="btn-icon">◈</span> Process & Index
+      </button>
       <div id="uploadStatus" class="status-msg"></div>
     </section>
 
+    <div class="divider"></div>
+
     <section class="panel">
-      <h2>📚 Your library</h2>
+      <div class="panel-label">02 — INDEXED DOCS</div>
       <div id="libraryPills" class="pills">
-        <span class="empty-hint">No PDFs yet</span>
+        <span class="empty-hint">nothing here yet. upload something.</span>
       </div>
     </section>
 
-    <section class="panel stats-panel">
-      <div class="stat">
+    <div class="divider"></div>
+
+    <section class="stats-row">
+      <div class="stat-box">
         <div class="stat-num" id="statPdfs">0</div>
         <div class="stat-label">PDFs</div>
       </div>
-      <div class="stat">
+      <div class="stat-sep"></div>
+      <div class="stat-box">
         <div class="stat-num" id="statChunks">0</div>
         <div class="stat-label">Chunks</div>
       </div>
-      <div class="stat">
+      <div class="stat-sep"></div>
+      <div class="stat-box">
         <div class="stat-num" id="statQuestions">0</div>
-        <div class="stat-label">Questions</div>
+        <div class="stat-label">Queries</div>
       </div>
     </section>
 
-    <button id="clearChatBtn" class="btn btn-ghost">🗑️ Clear chat</button>
+    <div class="divider"></div>
+
+    <button id="clearChatBtn" class="btn btn-ghost">
+      <span>⌫</span> Nuke chat history
+    </button>
+
   </aside>
 
   <!-- ============ MAIN ============ -->
   <main class="main">
 
-    <nav class="tabs">
-      <button class="tab-btn active" data-tab="chat">💬 Chat</button>
-      <button class="tab-btn" data-tab="history">🕒 History</button>
-    </nav>
+    <header class="topbar">
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="chat">
+          <span class="tab-icon">◉</span> Chat
+        </button>
+        <button class="tab-btn" data-tab="history">
+          <span class="tab-icon">◎</span> History
+        </button>
+      </nav>
+      <div class="topbar-right">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="status-text" id="statusText">idle</span>
+      </div>
+    </header>
 
     <!-- CHAT TAB -->
     <section id="tab-chat" class="tab-panel active">
+
       <div id="chatEmpty" class="chat-empty">
-        <div class="chat-empty-icon">🩵</div>
-        <h3>Ask anything about your PDFs</h3>
-        <p>Upload documents on the left, then start chatting below.</p>
+        <div class="empty-art">
+          <div class="empty-ring ring-1"></div>
+          <div class="empty-ring ring-2"></div>
+          <div class="empty-ring ring-3"></div>
+          <span class="empty-symbol">⚡</span>
+        </div>
+        <h2>Feed me a PDF.<br>I'll handle the reading.</h2>
+        <p>Upload docs on the left. Then ask anything.<br>I won't judge your questions. Mostly.</p>
         <div class="example-chips">
-          <button class="chip" data-q="Summarize this document">📝 Summarize this document</button>
-          <button class="chip" data-q="What are the key points?">🔑 Key points?</button>
-          <button class="chip" data-q="What questions does this answer?">❓ What does it answer?</button>
+          <button class="chip" data-q="Summarize this document">Summarize it</button>
+          <button class="chip" data-q="What are the key points?">Key points?</button>
+          <button class="chip" data-q="What questions does this answer?">What does it answer?</button>
+          <button class="chip" data-q="Give me the most important findings">Top findings</button>
         </div>
       </div>
 
       <div class="chat-toolbar" id="chatToolbar" style="display:none;">
-        <span class="toolbar-label">Export chat:</span>
-        <button id="exportTxt" class="toolbar-btn">📄 Text file</button>
-        <button id="exportPdf" class="toolbar-btn">🖨️ PDF</button>
+        <span class="toolbar-label">// export:</span>
+        <button id="exportTxt" class="toolbar-btn">↓ .txt</button>
+        <button id="exportPdf" class="toolbar-btn">↓ .pdf</button>
       </div>
 
       <div id="chatMessages" class="chat-messages"></div>
 
       <form id="chatForm" class="chat-input-bar">
-        <input type="text" id="chatInput" placeholder="Ask a question about your PDFs..." autocomplete="off">
-        <button type="submit" class="btn btn-send">Send ➤</button>
+        <div class="input-prefix">&gt;_</div>
+        <input type="text" id="chatInput" placeholder="ask your question here..." autocomplete="off">
+        <button type="submit" class="btn btn-send">
+          Send <span class="send-arrow">↵</span>
+        </button>
       </form>
+
     </section>
 
     <!-- HISTORY TAB -->
     <section id="tab-history" class="tab-panel">
       <div class="history-search-bar">
-        <input type="text" id="historySearch" placeholder="🔍 Search past Q&A by keyword...">
+        <div class="search-prefix">⌕</div>
+        <input type="text" id="historySearch" placeholder="search past queries...">
         <button id="historySearchBtn" class="btn btn-send">Search</button>
-        <button id="historyClearSearch" class="btn btn-ghost" style="display:none; width:auto; margin:0; padding:10px 16px;">✕ Clear</button>
+        <button id="historyClearSearch" class="btn btn-ghost" style="display:none; width:auto; margin:0; padding:8px 14px;">✕</button>
       </div>
       <div id="historySearchInfo" class="history-search-info"></div>
       <div id="historyList" class="history-list">
-        <p class="empty-hint">No history yet — ask a question in the Chat tab first.</p>
+        <p class="empty-hint">no history yet. start a conversation.</p>
       </div>
     </section>
 
