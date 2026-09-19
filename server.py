@@ -100,11 +100,22 @@ def api_upload():
 
 @app.route("/api/ask", methods=["POST"])
 def api_ask():
-    """Body: {"question": "..."}. Returns answer + source chunks used."""
+    """Body: {"question": "...", "history": [{"role": "user"|"assistant", "content": "..."}]}.
+    history is optional — pass the conversation so far for follow-up support.
+    Returns answer + source chunks used."""
     data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
     if not question:
         return jsonify({"error": "Question is required"}), 400
+
+    # conversation_history: list of prior {role, content} turns from the frontend
+    conversation_history = data.get("history") or []
+    # Sanitize — only keep valid role/content dicts, cap at last 10 turns
+    conversation_history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in conversation_history
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant") and m.get("content")
+    ][-10:]
 
     if get_collection().count() == 0:
         return jsonify({
@@ -112,7 +123,11 @@ def api_ask():
             "chunks": [],
         })
 
-    answer, chunks = answer_question(question, return_chunks=True)
+    answer, chunks = answer_question(
+        question,
+        return_chunks=True,
+        conversation_history=conversation_history or None,
+    )
     return jsonify({"answer": answer, "chunks": chunks})
 
 
