@@ -216,26 +216,35 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Answer generation (local LLM via Ollama)
 # ---------------------------------------------------------------------------
-def build_prompt(question: str, chunks: list[dict]) -> str:
+def build_system_prompt(chunks: list[dict]) -> str:
+    """Builds the system prompt containing retrieved context chunks.
+    Sent once as the 'system' role — stays in context for the whole conversation."""
     context_blocks = []
     for c in chunks:
         context_blocks.append(f"[Source: {c['source']}, Page {c['page']}]\n{c['text']}")
     context = "\n\n---\n\n".join(context_blocks)
 
-    prompt = f"""You are a helpful assistant answering questions using ONLY the provided context from PDF documents.
-If the answer isn't in the context, say so clearly instead of guessing.
-Always cite the source filename and page number for each fact you use.
-
-Context:
-{context}
-
-Question: {question}
-
-Give a clear, well-organized answer with citations like (source.pdf, p.X)."""
-    return prompt
+    return (
+        "You are a helpful assistant answering questions using ONLY the provided context "
+        "from PDF documents. If the answer isn't in the context, say so clearly instead of "
+        "guessing. Always cite the source filename and page number for each fact you use "
+        "like (source.pdf, p.X). You have memory of the full conversation so far — use it "
+        "to understand follow-up questions and references like 'it', 'that', 'explain more'.\n\n"
+        f"Context from documents:\n{context}"
+    )
 
 
-def ask_ollama(prompt: str, model: str = OLLAMA_MODEL) -> str:
+def ask_ollama(
+    question: str,
+    system_prompt: str,
+    conversation_history: list[dict] | None = None,
+    model: str = OLLAMA_MODEL,
+) -> str:
+    """Sends the full conversation to Ollama so it can handle follow-up questions.
+
+    conversation_history: list of {"role": "user"/"assistant", "content": str}
+    representing all prior turns in this session (NOT including current question).
+    """
     try:
         import ollama
     except ImportError:
@@ -243,11 +252,13 @@ def ask_ollama(prompt: str, model: str = OLLAMA_MODEL) -> str:
                 "  pip install ollama --break-system-packages\n"
                 "and make sure `ollama serve` is running with a pulled model.]")
 
+    messages = [{"role": "system", "content": system_prompt}]
+    if conversation_history:
+        messages.extend(conversation_history)
+    messages.append({"role": "user", "content": question})
+
     try:
-        response = ollama.chat(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        response = ollama.chat(model=model, messages=messages)
         return response["message"]["content"]
     except Exception as e:
         return (f"[Error calling Ollama: {e}\n"
@@ -318,18 +329,41 @@ def show_history(last_n: int | None = None):
     print(f"\n({len(records)} record(s) shown)")
 
 
-def answer_question(question: str, top_k: int = TOP_K, return_chunks: bool = False):
-    """Returns the answer string. If return_chunks=True, returns a tuple
-    (answer_with_footer, chunks) where chunks is the list of retrieved
-    context dicts — handy for showing "sources used" in a UI."""
-    chunks = retrieve(question, top_k)
+def answer_question(
+    question: str,
+    top_k: int = TOP_K,
+    return_chunks: bool = False,
+    conversation_history: list[dict] | None = None,
+):
+    """Answer a question using RAG + optional conversation history.
+
+    conversation_history: list of {"role": "user"/"assistant", "content": str}
+    for all prior turns in this session. When provided, the LLM can resolve
+    follow-up questions like 'explain that further' or 'give an example'.
+
+    Retrieval always uses the current question (so context stays relevant),
+    but the LLM sees the full conversation so it understands references.
+
+    Returns:
+        str                 when return_chunks=False (default — CLI use)
+        (str, list[dict])   when return_chunks=True  (UI use)
+    """
+    # For retrieval: combine last user question + recent context for better
+    # semantic search on follow-ups ("explain that" → include prior Q for signal)
+    retrieval_query = question
+    if conversation_history:
+        # Append last assistant answer to the query for follow-up disambiguation
+        prior_turns = [m["content"] for m in conversation_history[-4:]]
+        retrieval_query = " ".join(prior_turns + [question])
+
+    chunks = retrieve(retrieval_query, top_k)
     if not chunks:
         answer = "No documents in the database yet. Add PDFs first with --add."
         log_history(question, answer, [])
         return (answer, []) if return_chunks else answer
 
-    prompt = build_prompt(question, chunks)
-    answer = ask_ollama(prompt)
+    system_prompt = build_system_prompt(chunks)
+    answer = ask_ollama(question, system_prompt, conversation_history)
 
     sources_used = sorted({f"{c['source']} (p.{c['page']})" for c in chunks})
     log_history(question, answer, sources_used)
@@ -343,7 +377,10 @@ def answer_question(question: str, top_k: int = TOP_K, return_chunks: bool = Fal
 # CLI
 # ---------------------------------------------------------------------------
 def interactive_loop():
-    print("=== Multi-PDF RAG — ask questions ('history' to view past Q&A, 'exit' to quit) ===\n")
+    print("=== Multi-PDF RAG — ask questions ('history' to view past Q&A, 'exit' to quit) ===")
+    print("    Conversation memory is ON — follow-up questions work.\n")
+    conversation_history: list[dict] = []
+
     while True:
         q = input("Q: ").strip()
         if q.lower() in ("exit", "quit", "q"):
@@ -354,7 +391,22 @@ def interactive_loop():
             show_history()
             print()
             continue
-        print("\n" + answer_question(q) + "\n")
+        if q.lower() in ("clear", "reset", "new"):
+            conversation_history = []
+            print("[conversation memory cleared]\n")
+            continue
+
+        answer = answer_question(q, conversation_history=conversation_history)
+        print("\n" + answer + "\n")
+
+        # Append this turn to memory (strip the footer for cleaner context)
+        clean_answer = answer.split("\n\nRetrieved from:")[0]
+        conversation_history.append({"role": "user",      "content": q})
+        conversation_history.append({"role": "assistant", "content": clean_answer})
+
+        # Keep last 10 turns in memory (5 exchanges) to avoid token overflow
+        if len(conversation_history) > 10:
+            conversation_history = conversation_history[-10:]
 
 
 def main():
