@@ -1,164 +1,480 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDFpulse — Yeah, it reads PDFs</title>
-<link rel="stylesheet" href="/static/style.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;600;700;800&display=swap" rel="stylesheet">
-</head>
-<body>
+/* ==========================================================================
+   PDFpulse — Dark / Electric Purple + Cyan / Sarcastic Professional
+   ========================================================================== */
 
-<div class="noise"></div>
-<div class="glow glow-1"></div>
-<div class="glow glow-2"></div>
+:root {
+  --bg:          #0d0d0f;
+  --bg-2:        #111115;
+  --bg-3:        #18181f;
+  --bg-4:        #1e1e28;
+  --border:      rgba(255,255,255,0.07);
+  --border-hi:   rgba(139,92,246,0.4);
 
-<div class="app">
+  --purple:      #8b5cf6;
+  --purple-dim:  #6d28d9;
+  --purple-glow: rgba(139,92,246,0.2);
+  --cyan:        #22d3ee;
+  --cyan-dim:    #0891b2;
+  --cyan-glow:   rgba(34,211,238,0.15);
 
-  <!-- ============ SIDEBAR ============ -->
-  <aside class="sidebar">
+  --text:        #e2e8f0;
+  --text-soft:   #64748b;
+  --text-muted:  #334155;
 
-    <div class="brand">
-      <div class="brand-logo">
-        <span class="logo-symbol">⚡</span>
-      </div>
-      <div class="brand-text">
-        <h1>PDFpulse</h1>
-        <p class="brand-sub">// reads your boring PDFs so you don't have to</p>
-      </div>
-    </div>
+  --radius:      12px;
+  --radius-sm:   8px;
+  --radius-lg:   18px;
 
-    <div class="divider"></div>
+  --font-mono:   'JetBrains Mono', 'Courier New', monospace;
+  --font-main:   'Space Grotesk', system-ui, sans-serif;
+}
 
-    <section class="panel">
-      <div class="panel-label">01 — DROP ZONE</div>
-      <label class="dropzone" id="dropzone">
-        <input type="file" id="fileInput" accept=".pdf" multiple hidden>
-        <div class="dz-inner">
-          <div class="dz-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          </div>
-          <div class="dz-text">drag PDFs or <span>click to browse</span></div>
-          <div class="dz-sub">yes, multiple files are fine</div>
-        </div>
-      </label>
-      <ul id="fileList" class="file-list"></ul>
-      <button id="processBtn" class="btn btn-primary" disabled>
-        <span class="btn-icon">◈</span> Process & Index
-      </button>
-      <div id="uploadStatus" class="status-msg"></div>
-    </section>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    <div class="divider"></div>
+html, body {
+  height: 100%;
+  font-family: var(--font-main);
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
 
-    <section class="panel">
-      <div class="panel-label">02 — INDEXED DOCS</div>
-      <div id="libraryPills" class="pills">
-        <span class="empty-hint">nothing here yet. upload something.</span>
-      </div>
-    </section>
+/* Noise texture overlay */
+.noise {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: 0.4;
+}
 
-    <div class="divider"></div>
+/* Ambient glow blobs */
+.glow {
+  position: fixed; border-radius: 50%;
+  filter: blur(120px); pointer-events: none; z-index: 0;
+}
+.glow-1 { width: 500px; height: 500px; background: var(--purple-glow); top: -200px; left: -100px; }
+.glow-2 { width: 400px; height: 400px; background: var(--cyan-glow); bottom: -150px; right: -100px; }
 
-    <section class="stats-row">
-      <div class="stat-box">
-        <div class="stat-num" id="statPdfs">0</div>
-        <div class="stat-label">PDFs</div>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat-box">
-        <div class="stat-num" id="statChunks">0</div>
-        <div class="stat-label">Chunks</div>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat-box">
-        <div class="stat-num" id="statQuestions">0</div>
-        <div class="stat-label">Queries</div>
-      </div>
-    </section>
+.app {
+  position: relative; z-index: 1;
+  display: flex; height: 100vh;
+}
 
-    <div class="divider"></div>
+/* ============================= SIDEBAR ============================= */
+.sidebar {
+  width: 280px; flex-shrink: 0;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  padding: 24px 20px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
 
-    <button id="clearChatBtn" class="btn btn-ghost">
-      <span>⌫</span> Nuke chat history
-    </button>
+/* Brand */
+.brand { display: flex; align-items: flex-start; gap: 12px; }
+.brand-logo {
+  width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--purple-dim), var(--cyan-dim));
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 20px var(--purple-glow);
+}
+.logo-symbol { font-size: 1.3rem; }
+.brand-text h1 { font-size: 1.25rem; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+.brand-sub { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-soft); margin-top: 4px; line-height: 1.4; }
 
-  </aside>
+/* Divider */
+.divider { height: 1px; background: var(--border); flex-shrink: 0; }
 
-  <!-- ============ MAIN ============ -->
-  <main class="main">
+/* Panel */
+.panel { display: flex; flex-direction: column; gap: 10px; }
+.panel-label {
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600;
+  color: var(--purple); letter-spacing: 0.12em; text-transform: uppercase;
+}
 
-    <header class="topbar">
-      <nav class="tabs">
-        <button class="tab-btn active" data-tab="chat">
-          <span class="tab-icon">◉</span> Chat
-        </button>
-        <button class="tab-btn" data-tab="history">
-          <span class="tab-icon">◎</span> History
-        </button>
-      </nav>
-      <div class="topbar-right">
-        <div class="status-dot" id="statusDot"></div>
-        <span class="status-text" id="statusText">idle</span>
-      </div>
-    </header>
+/* Dropzone */
+.dropzone {
+  display: block; cursor: pointer;
+  border: 1px dashed rgba(139,92,246,0.35);
+  border-radius: var(--radius);
+  background: rgba(139,92,246,0.04);
+  transition: all 0.2s ease;
+}
+.dropzone:hover, .dropzone.dragover {
+  border-color: var(--cyan);
+  background: rgba(34,211,238,0.05);
+  box-shadow: 0 0 16px var(--cyan-glow);
+}
+.dz-inner { padding: 20px 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.dz-icon { color: var(--purple); opacity: 0.8; }
+.dz-text { font-size: 0.83rem; color: var(--text-soft); text-align: center; }
+.dz-text span { color: var(--cyan); font-weight: 600; text-decoration: underline; }
+.dz-sub { font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); }
 
-    <!-- CHAT TAB -->
-    <section id="tab-chat" class="tab-panel active">
+/* File list */
+.file-list { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 100px; overflow-y: auto; }
+.file-list li {
+  font-size: 0.75rem; font-family: var(--font-mono);
+  background: var(--bg-3); border: 1px solid var(--border);
+  padding: 5px 10px; border-radius: 6px; color: var(--text-soft);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.file-list li .remove { cursor: pointer; color: var(--purple); font-weight: 700; }
 
-      <div id="chatEmpty" class="chat-empty">
-        <div class="empty-art">
-          <div class="empty-ring ring-1"></div>
-          <div class="empty-ring ring-2"></div>
-          <div class="empty-ring ring-3"></div>
-          <span class="empty-symbol">⚡</span>
-        </div>
-        <h2>Feed me a PDF.<br>I'll handle the reading.</h2>
-        <p>Upload docs on the left. Then ask anything.<br>I won't judge your questions. Mostly.</p>
-        <div class="example-chips">
-          <button class="chip" data-q="Summarize this document">Summarize it</button>
-          <button class="chip" data-q="What are the key points?">Key points?</button>
-          <button class="chip" data-q="What questions does this answer?">What does it answer?</button>
-          <button class="chip" data-q="Give me the most important findings">Top findings</button>
-        </div>
-      </div>
+/* Buttons */
+.btn {
+  width: 100%; border: none; border-radius: var(--radius);
+  padding: 11px 16px; font-family: var(--font-main);
+  font-weight: 700; font-size: 0.85rem; cursor: pointer;
+  transition: all 0.15s ease; display: flex; align-items: center;
+  justify-content: center; gap: 8px;
+}
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-icon { font-size: 1rem; }
 
-      <div class="chat-toolbar" id="chatToolbar" style="display:none;">
-        <span class="toolbar-label">// export:</span>
-        <button id="exportTxt" class="toolbar-btn">↓ .txt</button>
-        <button id="exportPdf" class="toolbar-btn">↓ .pdf</button>
-      </div>
+.btn-primary {
+  background: linear-gradient(135deg, var(--purple-dim), var(--purple));
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(109,40,217,0.4);
+  border: 1px solid rgba(139,92,246,0.5);
+}
+.btn-primary:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(109,40,217,0.55);
+}
 
-      <div id="chatMessages" class="chat-messages"></div>
+.btn-ghost {
+  background: transparent; color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { border-color: var(--purple); color: var(--purple); }
 
-      <form id="chatForm" class="chat-input-bar">
-        <div class="input-prefix">&gt;_</div>
-        <input type="text" id="chatInput" placeholder="ask your question here..." autocomplete="off">
-        <button type="submit" class="btn btn-send">
-          Send <span class="send-arrow">↵</span>
-        </button>
-      </form>
+/* Status msg */
+.status-msg { font-size: 0.75rem; font-family: var(--font-mono); min-height: 16px; }
+.status-msg.success { color: var(--cyan); }
+.status-msg.error { color: #f87171; }
+.status-msg.loading { color: var(--purple); }
 
-    </section>
+/* Library pills */
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  background: var(--bg-3); border: 1px solid var(--border-hi);
+  color: var(--purple); padding: 3px 10px;
+  border-radius: 999px; font-size: 0.7rem;
+  font-family: var(--font-mono); font-weight: 600;
+}
+.empty-hint { font-family: var(--font-mono); color: var(--text-muted); font-size: 0.72rem; }
 
-    <!-- HISTORY TAB -->
-    <section id="tab-history" class="tab-panel">
-      <div class="history-search-bar">
-        <div class="search-prefix">⌕</div>
-        <input type="text" id="historySearch" placeholder="search past queries...">
-        <button id="historySearchBtn" class="btn btn-send">Search</button>
-        <button id="historyClearSearch" class="btn btn-ghost" style="display:none; width:auto; margin:0; padding:8px 14px;">✕</button>
-      </div>
-      <div id="historySearchInfo" class="history-search-info"></div>
-      <div id="historyList" class="history-list">
-        <p class="empty-hint">no history yet. start a conversation.</p>
-      </div>
-    </section>
+/* Stats row */
+.stats-row {
+  display: flex; align-items: center;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 10px;
+}
+.stat-box { flex: 1; text-align: center; }
+.stat-num {
+  font-size: 1.5rem; font-weight: 800;
+  font-family: var(--font-mono);
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.stat-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+.stat-sep { width: 1px; height: 32px; background: var(--border); }
 
-  </main>
-</div>
+/* ============================= MAIN ============================= */
+.main {
+  flex: 1; display: flex; flex-direction: column;
+  background: var(--bg); overflow: hidden;
+}
 
-<script src="/static/app.js"></script>
-</body>
-</html>
+/* Topbar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 28px 0;
+}
+.tabs { display: flex; gap: 4px; }
+.tab-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-soft); padding: 8px 18px;
+  border-radius: var(--radius-sm); font-family: var(--font-main);
+  font-weight: 600; font-size: 0.82rem; cursor: pointer;
+  transition: all 0.15s ease; display: flex; align-items: center; gap: 6px;
+}
+.tab-icon { font-size: 0.7rem; }
+.tab-btn.active {
+  background: var(--bg-3); border-color: var(--purple);
+  color: var(--purple); box-shadow: 0 0 12px var(--purple-glow);
+}
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-muted); transition: all 0.3s;
+}
+.status-dot.active { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: pulse 1.5s infinite; }
+.status-dot.ready { background: var(--purple); box-shadow: 0 0 8px var(--purple); }
+.status-text { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* Tab panels */
+.tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; padding: 20px 28px; }
+.tab-panel.active { display: flex; }
+
+/* Chat empty */
+.chat-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center; gap: 12px;
+}
+.empty-art {
+  position: relative; width: 80px; height: 80px;
+  display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
+}
+.empty-ring {
+  position: absolute; border-radius: 50%; border: 1px solid;
+  animation: spin linear infinite;
+}
+.ring-1 { width: 80px; height: 80px; border-color: rgba(139,92,246,0.3); animation-duration: 8s; }
+.ring-2 { width: 58px; height: 58px; border-color: rgba(34,211,238,0.25); animation-duration: 6s; animation-direction: reverse; }
+.ring-3 { width: 38px; height: 38px; border-color: rgba(139,92,246,0.2); animation-duration: 4s; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-symbol { font-size: 1.4rem; position: relative; z-index: 1; }
+
+.chat-empty h2 { font-size: 1.3rem; font-weight: 800; color: #fff; line-height: 1.3; }
+.chat-empty p { font-size: 0.85rem; color: var(--text-soft); line-height: 1.6; }
+
+.example-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.chip {
+  background: var(--bg-3); border: 1px solid var(--border-hi);
+  color: var(--text-soft); padding: 7px 14px; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  font-family: var(--font-main); transition: all 0.15s ease;
+}
+.chip:hover { background: var(--purple-glow); color: var(--purple); border-color: var(--purple); }
+
+/* Chat toolbar */
+.chat-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px; flex-shrink: 0;
+}
+.toolbar-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); margin-right: 4px; }
+.toolbar-btn {
+  background: var(--bg-3); border: 1px solid var(--border);
+  color: var(--text-soft); padding: 5px 14px; border-radius: 6px;
+  font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  font-family: var(--font-mono); transition: all 0.15s ease;
+}
+.toolbar-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+/* Chat messages */
+.chat-messages {
+  flex: 1; overflow-y: auto; display: flex;
+  flex-direction: column; gap: 20px; padding: 4px 2px 16px;
+}
+.chat-messages::-webkit-scrollbar { width: 4px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+.msg { display: flex; gap: 12px; animation: msgIn 0.2s ease; }
+@keyframes msgIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+.msg.user { flex-direction: row-reverse; }
+.avatar {
+  width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700; font-family: var(--font-mono);
+}
+.msg.user .avatar { background: linear-gradient(135deg, var(--purple-dim), var(--purple)); color: #fff; }
+.msg.assistant .avatar { background: linear-gradient(135deg, #0e7490, var(--cyan-dim)); color: #fff; }
+
+.bubble-wrap { display: flex; flex-direction: column; gap: 6px; max-width: 75%; }
+.msg.user .bubble-wrap { align-items: flex-end; }
+
+.bubble {
+  padding: 12px 16px; border-radius: var(--radius); font-size: 0.9rem;
+  line-height: 1.6; white-space: pre-wrap;
+}
+.msg.user .bubble {
+  background: linear-gradient(135deg, rgba(109,40,217,0.3), rgba(139,92,246,0.2));
+  border: 1px solid rgba(139,92,246,0.3);
+  color: var(--text); border-bottom-right-radius: 4px;
+}
+.msg.assistant .bubble {
+  background: var(--bg-3); border: 1px solid var(--border);
+  color: var(--text); border-bottom-left-radius: 4px;
+}
+.msg.assistant .bubble.thinking {
+  color: var(--text-muted); font-family: var(--font-mono); font-size: 0.8rem;
+  border-color: rgba(139,92,246,0.2);
+}
+.thinking-dots::after {
+  content: '...'; animation: dots 1.2s steps(4,end) infinite;
+}
+@keyframes dots { 0%,100%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+
+/* Sources */
+.sources-toggle {
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--cyan); cursor: pointer; display: flex; align-items: center; gap: 4px;
+}
+.sources-toggle:hover { color: var(--purple); }
+.sources-box { display: none; flex-direction: column; gap: 6px; }
+.sources-box.open { display: flex; }
+.source-chunk {
+  background: var(--bg-4); border-left: 2px solid var(--purple);
+  padding: 8px 12px; border-radius: 6px; font-size: 0.78rem;
+  color: var(--text-soft);
+}
+.source-chunk .meta {
+  font-family: var(--font-mono); color: var(--purple);
+  font-size: 0.68rem; font-weight: 700; margin-bottom: 4px;
+}
+
+/* Chat input */
+.chat-input-bar {
+  display: flex; align-items: center; gap: 0;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+  transition: border-color 0.2s;
+  flex-shrink: 0;
+}
+.chat-input-bar:focus-within { border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-glow); }
+.input-prefix {
+  padding: 0 12px; font-family: var(--font-mono); font-size: 0.85rem;
+  color: var(--purple); font-weight: 700; user-select: none;
+}
+.chat-input-bar input {
+  flex: 1; border: none; outline: none; background: transparent;
+  padding: 14px 8px; font-size: 0.9rem; color: var(--text);
+  font-family: var(--font-main);
+}
+.chat-input-bar input::placeholder { color: var(--text-muted); }
+.btn-send {
+  width: auto; margin: 8px; border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--purple-dim), var(--purple));
+  color: #fff; padding: 8px 18px; font-size: 0.82rem;
+  font-weight: 700; border: none; cursor: pointer; display: flex;
+  align-items: center; gap: 6px; font-family: var(--font-main);
+  transition: all 0.15s ease;
+}
+.btn-send:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(109,40,217,0.5); }
+.send-arrow { font-family: var(--font-mono); font-size: 1rem; }
+
+/* History tab */
+.history-search-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px; flex-shrink: 0;
+}
+.search-prefix {
+  font-size: 1.1rem; color: var(--text-muted); padding: 0 6px; user-select: none;
+}
+.history-search-bar input {
+  flex: 1; background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.85rem;
+  color: var(--text); font-family: var(--font-main); outline: none;
+  transition: border-color 0.2s;
+}
+.history-search-bar input:focus { border-color: var(--purple); }
+.history-search-bar input::placeholder { color: var(--text-muted); }
+.history-search-bar .btn-send { margin: 0; padding: 10px 16px; }
+.history-search-bar .btn-ghost { width: auto; margin: 0; padding: 9px 14px; font-size: 0.8rem; }
+
+.history-search-info {
+  font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--text-muted); margin-bottom: 10px; min-height: 16px;
+}
+.history-search-info .highlight { color: var(--cyan); font-weight: 700; }
+
+.history-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.history-list::-webkit-scrollbar { width: 4px; }
+.history-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+.history-item {
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.history-item:hover { border-color: var(--border-hi); }
+.history-item.open { border-color: var(--purple); }
+.h-question { font-weight: 700; color: var(--text); font-size: 0.88rem; }
+.h-time { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); margin-top: 3px; }
+.h-answer {
+  margin-top: 10px; font-size: 0.83rem; color: var(--text-soft);
+  line-height: 1.6; display: none; white-space: pre-wrap;
+  border-top: 1px solid var(--border); padding-top: 10px;
+}
+.history-item.open .h-answer { display: block; }
+.h-sources { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Print */
+@media print {
+  .sidebar,.tabs,.chat-toolbar,.chat-input-bar,.chat-empty,
+  .glow,.noise,.topbar { display: none !important; }
+  body { background: #fff !important; color: #000 !important; overflow: visible !important; }
+  .app { display: block !important; }
+  .main { padding: 0 !important; overflow: visible !important; }
+  .tab-panel { display: block !important; overflow: visible !important; }
+  #tab-history { display: none !important; }
+  .chat-messages { overflow: visible !important; max-height: none !important; }
+  .msg { page-break-inside: avoid; }
+  .bubble { background: #f5f5f5 !important; color: #000 !important; border: 1px solid #ccc !important; }
+  .avatar { display: none !important; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { width: 100%; height: auto; }
+  .app { flex-direction: column; }
+  .bubble-wrap { max-width: 90%; }
+}
+
+/* ============================= TYPING INDICATOR ============================= */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+}
+.typing-indicator span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--purple);
+  display: inline-block;
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+.typing-indicator span:nth-child(1) { animation-delay: 0s; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; background: color-mix(in srgb, var(--purple) 60%, var(--cyan)); }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; background: var(--cyan); }
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.4; }
+  30%            { transform: translateY(-6px); opacity: 1;   }
+}
+
+/* ============================= COPY BUTTON ============================= */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.copy-btn:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.copy-btn.copied {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan-glow);
+}
+.copy-icon { font-size: 0.85rem; }
