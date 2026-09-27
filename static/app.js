@@ -2,7 +2,11 @@
 // PDFpulse — Frontend Logic
 // ============================================================
 
-const state = { pendingFiles: [] };
+const state = {
+  pendingFiles: [],
+  // Conversation memory — list of {role, content} sent to /api/ask each turn
+  conversationHistory: [],
+};
 
 // ---------- Elements ----------
 const dropzone       = document.getElementById("dropzone");
@@ -222,12 +226,25 @@ chatForm.addEventListener("submit", async (e) => {
     const res  = await fetch("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({
+        question,
+        history: state.conversationHistory,   // send full convo so LLM has context
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "something went wrong");
 
     updateMessage(thinkingEl, data.answer, data.chunks || []);
+
+    // Store this turn in memory (strip footer for cleaner context)
+    const cleanAnswer = data.answer.split("\n\nRetrieved from:")[0];
+    state.conversationHistory.push({ role: "user",      content: question });
+    state.conversationHistory.push({ role: "assistant", content: cleanAnswer });
+    // Cap at last 10 turns (5 exchanges) to avoid token overflow
+    if (state.conversationHistory.length > 10) {
+      state.conversationHistory = state.conversationHistory.slice(-10);
+    }
+
     refreshStatus();
     setStatus("ready", "answered");
     setTimeout(setIdleStatus, 3000);
@@ -239,21 +256,24 @@ chatForm.addEventListener("submit", async (e) => {
 });
 
 function addMessage(role, text, opts = {}) {
-  const msg    = document.createElement("div");
+  const msg     = document.createElement("div");
   msg.className = `msg ${role}`;
 
-  const avatar = document.createElement("div");
+  const avatar  = document.createElement("div");
   avatar.className = "avatar";
   avatar.textContent = role === "user" ? "you" : "ai";
 
-  const wrap   = document.createElement("div");
+  const wrap    = document.createElement("div");
   wrap.className = "bubble-wrap";
 
-  const bubble = document.createElement("div");
+  const bubble  = document.createElement("div");
   bubble.className = "bubble" + (opts.thinking ? " thinking" : "");
 
   if (opts.thinking) {
-    bubble.innerHTML = `${escapeHtml(text)} <span class="thinking-dots"></span>`;
+    bubble.innerHTML = `
+      <div class="typing-indicator">
+        <span></span><span></span><span></span>
+      </div>`;
   } else {
     bubble.textContent = text;
   }
@@ -292,6 +312,31 @@ function updateMessage(msgRef, text, chunks) {
     msgRef.wrap.appendChild(toggle);
     msgRef.wrap.appendChild(box);
   }
+
+  // Copy button — only on assistant messages
+  if (msgRef.msg.classList.contains("assistant")) {
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "copy-btn";
+    copyBtn.innerHTML = `<span class="copy-icon">⎘</span> copy`;
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      copyBtn.innerHTML = `<span class="copy-icon">✓</span> copied`;
+      copyBtn.classList.add("copied");
+      setTimeout(() => {
+        copyBtn.innerHTML = `<span class="copy-icon">⎘</span> copy`;
+        copyBtn.classList.remove("copied");
+      }, 2000);
+    });
+    msgRef.wrap.appendChild(copyBtn);
+  }
+
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -299,9 +344,10 @@ function updateMessage(msgRef, text, chunks) {
 // Clear chat
 // ============================================================
 clearChatBtn.addEventListener("click", () => {
-  chatMessages.innerHTML   = "";
-  chatEmpty.style.display  = "flex";
+  chatMessages.innerHTML    = "";
+  chatEmpty.style.display   = "flex";
   chatToolbar.style.display = "none";
+  state.conversationHistory = [];   // wipe memory on clear
   setIdleStatus();
 });
 
